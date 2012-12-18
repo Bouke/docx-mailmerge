@@ -1,3 +1,4 @@
+from copy import deepcopy
 import re
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
@@ -48,19 +49,21 @@ class MailMerge(object):
                     parent[idx] = Element('MergeField', name=m.group(1))
 
             for parent in part.iterfind('.//{%(w)s}instrText/../..' % NAMESPACES):
-                for idx, child in enumerate(parent):
-                    fldChar = child.find('{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]' % NAMESPACES)
-                    if fldChar is None:
-                        continue
-                    instr = parent[idx + 1].find('{%(w)s}instrText' % NAMESPACES)
-                    if instr is None:
-                        continue
-                    m = r.match(instr.text)
+                children = list(parent)
+                fields = zip(
+                    [children.index(e) for e in
+                     parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
+                    [children.index(e) for e in
+                     parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
+                    [e.text for e in
+                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)])
+                for idx_begin, idx_end, instr in fields:
+                    m = r.match(instr)
                     if m is None:
                         continue
-                    parent[idx] = Element('MergeField', name=m.group(1))
-                    to_delete += [(parent, parent[i])
-                                  for i in range(idx+1, idx+5)]
+                    parent[idx_begin] = Element('MergeField', name=m.group(1))
+                    to_delete += [(parent, parent[i + 1])
+                                  for i in range(idx_begin, idx_end)]
 
         for parent, child in to_delete:
             parent.remove(child)
