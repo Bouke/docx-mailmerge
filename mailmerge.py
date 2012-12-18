@@ -102,7 +102,15 @@ class MailMerge(object):
             mf.append(ElementTree.Element('{%(w)s}t' % NAMESPACES))
             mf[0].text = text
 
-    def find_row_node(self, field, parts=None):
+    def merge_rows(self, anchor, rows):
+        table, idx, template = self.__find_row_anchor(anchor)
+        del table[idx]
+        for row_data in rows:
+            row = deepcopy(template)
+            self.merge([row], **row_data)
+            table.append(row)
+
+    def __find_row_anchor(self, field, parts=None):
         if not parts:
             parts = self.parts.values()
         for part in parts:
