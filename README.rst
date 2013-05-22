@@ -2,6 +2,16 @@
 docx Mail Merge
 ===============
 
+.. image:: https://travis-ci.org/Bouke/docx-mailmerge.png?branch=master
+    :alt: Build Status
+    :target: https://travis-ci.org/Bouke/docx-mailmerge
+
+Performs a Mail Merge on Office Open XML (docx) files. Can be used on any
+system without having to install Microsoft Office Word.
+
+Installation
+============
+
 Installation with ``pip``:
 ::
 
@@ -11,7 +21,7 @@ Installation with ``pip``:
 Usage
 =====
 
-Read the file.
+Open the file.
 ::
 
     from mailmerge import MailMerge
