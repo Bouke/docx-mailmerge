@@ -34,18 +34,24 @@ class MailMerge(object):
 
         to_delete = []
 
-        r = re.compile(r' MERGEFIELD (.+?) \\\* MERGEFORMAT ', re.I)
+        r = re.compile(r' MERGEFIELD ([^ ]+?) (| \\\* MERGEFORMAT )', re.I)
         for part in self.parts.values():
             # Remove attribute that soft-links to other namespaces; other namespaces
             # are not used, so would cause word to throw an error.
-            del part.getroot().attrib['{%(mc)s}Ignorable' % NAMESPACES]
+            ignorable_key = '{%(mc)s}Ignorable' % NAMESPACES
+            if ignorable_key in part.getroot().attrib:
+                del part.getroot().attrib[ignorable_key]
 
             for parent in part.iterfind('.//{%(w)s}fldSimple/..' % NAMESPACES):
                 for idx, child in enumerate(parent):
                     if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
                         continue
                     instr = child.attrib['{%(w)s}instr' % NAMESPACES]
+
                     m = r.match(instr)
+                    if not m:
+                        raise ValueError('Could not determine name of merge '
+                                         'field in value "%s"' % instr)
                     parent[idx] = Element('MergeField', name=m.group(1))
 
             for parent in part.iterfind('.//{%(w)s}instrText/../..' % NAMESPACES):
