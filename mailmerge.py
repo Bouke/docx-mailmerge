@@ -8,6 +8,7 @@ from lxml import etree
 from lxml.etree import ElementTree
 from lxml.etree import Element
 from zipfile import ZipFile, ZIP_DEFLATED
+import warnings
 
 INTERNAL_NAMESPACE = "internal:docx-mailmerge"
 
@@ -25,10 +26,20 @@ CONTENT_TYPES = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
 )
 
-def first(lst):
+def _first(lst):
     for elem in lst:
         return elem
     return None
+
+_r_mergefield = re.compile(r'\s*MERGEFIELD\s+"?(?P<name>[^\s"]+?)"?\s+(|\\\*\s+MERGEFORMAT)\s*', re.I)
+def _extract_mailmerge_instr(instr):
+    m = _r_mergefield.match(instr)
+    if m:
+        return m.group("name")
+    else:
+        if "mergefield" in instr.lower():
+            warnings.warn('Invalid MERGEFIELD definition "%s" found' % (instr,), RuntimeWarning)
+        return None
 
 class MailMerge(object):
     def __init__(self, file):
@@ -43,7 +54,6 @@ class MailMerge(object):
                 zi = self.zip.getinfo(fn)
                 self.parts[zi] = ElementTree(file=self.zip.open(zi))
 
-        r = re.compile(r'\s*MERGEFIELD\s+"?([^\s"]+?)"?\s+(|\\\*\s+MERGEFORMAT)\s*', re.I)
         for part in self.parts.values():
             # Remove attribute that soft-links to other namespaces; other namespaces
             # are not used, so would cause word to throw an error.
@@ -56,19 +66,20 @@ class MailMerge(object):
                 for idx, child in enumerate(parent.iterfind("w:fldSimple", namespaces=NAMESPACES)):
                     instr = child.xpath('@w:instr', namespaces=NAMESPACES)[0]
 
-                    m = r.match(instr)
-                    if not m:
-                        raise ValueError('Could not determine name of merge '
-                                         'field in value "%s"' % instr)
+                    fieldName = _extract_mailmerge_instr(instr)
 
+                    if not fieldName:
+                        # Do not fail if no MERGEFIELD found
+                        continue
+                    
                     # Extract original w:r structure to preserve formatting
                     childspan = child.xpath('w:r', namespaces=NAMESPACES)[0]
-                    childtext = first(childspan.xpath('w:t', namespaces=NAMESPACES))
+                    childtext = _first(childspan.xpath('w:t', namespaces=NAMESPACES))
                     if childtext is None:
                         childtext = Element("{%(w)s}t" % NAMESPACES)
                         childspan.append(childtext)
                     childtext.set("{%(xml)s}space" % NAMESPACES, "preserve")
-                    childtext.set("{%(int)s}merge-field-name" % NAMESPACES, m.group(1))
+                    childtext.set("{%(int)s}merge-field-name" % NAMESPACES, fieldName)
                     parent.insert(parent.index(child),childspan)
                     parent.remove(child)
                     
@@ -86,8 +97,9 @@ class MailMerge(object):
                     idx_end = parent.index(endElm)
                     idx_instr = parent.index(instrElm)
                     instr = instrFld.text
-                    m = r.match(instr)
-                    if m is None:
+
+                    fieldName = _extract_mailmerge_instr(instr)
+                    if fieldName is None:
                         continue
 
                     # Original code caused following error due to premature erasing of the initial element, and repeated call to the same parent as a result of xpath evaluation for parent
@@ -101,15 +113,13 @@ class MailMerge(object):
                     # But remove instrFld
                     instrElm.remove(instrFld)
                     # Append new w:t if not present
-                    textFld = first(instrElm.xpath("w:t", namespaces=NAMESPACES))
+                    textFld = _first(instrElm.xpath("w:t", namespaces=NAMESPACES))
                     if textFld is None:
                         textFld = Element("{%(w)s}t" % NAMESPACES)
                         textFld.set("{%(xml)s}space" % NAMESPACES, "preserve")
                         instrElm.append(textFld)
                     
-                    textFld.set("{%(int)s}merge-field-name" % NAMESPACES, m.group(1))
-                    # Add deletion first
-                    
+                    textFld.set("{%(int)s}merge-field-name" % NAMESPACES, fieldName)
                     deleteSet = [parent[i] for i in range(idx_begin, idx_instr)] + [parent[i] for i in range(idx_instr + 1, idx_end + 1)]
                     
                     for elem in deleteSet:
