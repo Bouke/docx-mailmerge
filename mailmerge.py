@@ -34,7 +34,7 @@ class MailMerge(object):
 
         to_delete = []
 
-        r = re.compile(r' MERGEFIELD "?([^ ]+?)"? (| \\\* MERGEFORMAT )', re.I)
+        r = re.compile(r'\s*MERGEFIELD\s+"?([^\s"]+?)"?\s+(|\\\*\s+MERGEFORMAT)\s*', re.I)
         for part in self.parts.values():
             # Remove attribute that soft-links to other namespaces; other namespaces
             # are not used, so would cause word to throw an error.
