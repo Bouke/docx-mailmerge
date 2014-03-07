@@ -9,11 +9,13 @@ from lxml.etree import ElementTree
 from lxml.etree import Element
 from zipfile import ZipFile, ZIP_DEFLATED
 
+INTERNAL_NAMESPACE = "internal:docx-mailmerge"
+
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
     'ct': 'http://schemas.openxmlformats.org/package/2006/content-types',
-    'int': "internal:docx-mailmerge",
+    'int': INTERNAL_NAMESPACE,
     'xml': "http://www.w3.org/XML/1998/namespace",
 }
 
@@ -47,7 +49,7 @@ class MailMerge(object):
             # are not used, so would cause word to throw an error.
             ignorable_key = '{%(mc)s}Ignorable' % NAMESPACES
             if ignorable_key in part.getroot().attrib:
-                del part.getroot().attrib[ignorable_key]
+                part.getroot().attrib.pop(ignorable_key)
 
             for parent in part.iterfind('.//w:fldSimple/..', namespaces=NAMESPACES):
 
@@ -108,16 +110,15 @@ class MailMerge(object):
                     textFld.set("{%(int)s}merge-field-name" % NAMESPACES, m.group(1))
                     # Add deletion first
                     
-                    deleteSet = [parent[i] for i in range(idx_begin, idx_instr)] + [parent[i] for i in range(idx_instr + 1, idx_end)]
+                    deleteSet = [parent[i] for i in range(idx_begin, idx_instr)] + [parent[i] for i in range(idx_instr + 1, idx_end + 1)]
                     
                     for elem in deleteSet:
                         parent.remove(elem)
-                print etree.dump(parent)
 
     def write(self, file):
         for field in self.get_merge_fields():
             self.merge(**{field:''})
-
+        
         output = ZipFile(file, 'w', ZIP_DEFLATED)
         for zi in self.zip.filelist:
             if zi in self.parts:
@@ -132,8 +133,8 @@ class MailMerge(object):
             parts = self.parts.values()
         fields = set()
         for part in parts:
-            for mf in part.findall('.//MergeField'):
-                fields.add(mf.attrib['name'])
+            for mf in part.findall('.//w:t[@int:merge-field-name]', namespaces=NAMESPACES):
+                fields.add(mf.attrib['{%(int)s}merge-field-name' % NAMESPACES])
         return fields
 
     def merge(self, parts=None, **replacements):
@@ -145,11 +146,20 @@ class MailMerge(object):
                 self.__merge_field(part, field, text)
 
     def __merge_field(self, part, field, text):
-        for mf in part.findall('.//MergeField[@name="%s"]' % field):
-            mf.clear()
-            mf.tag = '{%(w)s}r' % NAMESPACES
-            mf.append(Element('{%(w)s}t' % NAMESPACES))
-            mf[0].text = text
+        for mf in part.findall('.//w:t[@int:merge-field-name="%s"]' % (field, ), namespaces=NAMESPACES):
+            mf.attrib.pop("{%(int)s}merge-field-name" % NAMESPACES)
+            
+            oldmf = mf
+            mf = Element(oldmf.tag)
+            for key, val in oldmf.attrib.iteritems():
+                mf.set(key, val)
+            mf.text = text
+            
+            # Replacing the element is the only way of clearing nsmap
+            # See https://bugs.launchpad.net/lxml/+bug/555602
+            container = oldmf.getparent()
+            container.insert(container.index(oldmf), mf)
+            container.remove(oldmf)
 
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
@@ -163,7 +173,7 @@ class MailMerge(object):
         if not parts:
             parts = self.parts.values()
         for part in parts:
-            for table in part.iterfind('.//{%(w)s}tbl' % NAMESPACES):
+            for table in part.iterfind('.//w:tbl', namespaces=NAMESPACES):
                 for idx, row in enumerate(table):
-                    if row.find('.//MergeField[@name="%s"]' % field) is not None:
+                    if row.find('.//w:t[@int:merge-field-name="%s"]' % (field, ), namespaces=NAMESPACES) is not None:
                         return table, idx, row
