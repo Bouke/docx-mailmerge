@@ -1,17 +1,21 @@
 from copy import deepcopy
 import re
-from xml.etree import ElementTree
-from xml.etree.ElementTree import Element
+
+# Why lxml? XPath! Plus the more rational and simple xmlns preservation
+# Not to mention that lxml and xml are mostly compatible.
+# Oh, and faster
+from lxml import etree
+from lxml.etree import ElementTree
+from lxml.etree import Element
 from zipfile import ZipFile, ZIP_DEFLATED
 
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
     'ct': 'http://schemas.openxmlformats.org/package/2006/content-types',
+    'int': "internal:docx-mailmerge",
+    'xml': "http://www.w3.org/XML/1998/namespace",
 }
-
-for prefix, uri in NAMESPACES.items():
-    ElementTree.register_namespace(prefix, uri)
 
 CONTENT_TYPES = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
@@ -19,20 +23,23 @@ CONTENT_TYPES = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
 )
 
+def first(lst):
+    for elem in lst:
+        return elem
+    return None
+
 class MailMerge(object):
     def __init__(self, file):
         self.zip = ZipFile(file)
         self.parts = {}
 
-        content_types = ElementTree.parse(self.zip.open('[Content_Types].xml'))
-        for file in content_types.iterfind('{%(ct)s}Override' % NAMESPACES):
-            type = file.attrib['ContentType' % NAMESPACES]
+        content_types = ElementTree(file=self.zip.open('[Content_Types].xml'))
+        for file in content_types.iterfind('ct:Override', namespaces=NAMESPACES):
+            type = file.attrib['ContentType']
             if type in CONTENT_TYPES:
-                fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
+                fn = file.attrib['PartName'].split('/', 1)[1]
                 zi = self.zip.getinfo(fn)
-                self.parts[zi] = ElementTree.parse(self.zip.open(zi))
-
-        to_delete = []
+                self.parts[zi] = ElementTree(file=self.zip.open(zi))
 
         r = re.compile(r'\s*MERGEFIELD\s+"?([^\s"]+?)"?\s+(|\\\*\s+MERGEFORMAT)\s*', re.I)
         for part in self.parts.values():
@@ -42,37 +49,70 @@ class MailMerge(object):
             if ignorable_key in part.getroot().attrib:
                 del part.getroot().attrib[ignorable_key]
 
-            for parent in part.iterfind('.//{%(w)s}fldSimple/..' % NAMESPACES):
-                for idx, child in enumerate(parent):
-                    if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
-                        continue
-                    instr = child.attrib['{%(w)s}instr' % NAMESPACES]
+            for parent in part.iterfind('.//w:fldSimple/..', namespaces=NAMESPACES):
+
+                for idx, child in enumerate(parent.iterfind("w:fldSimple", namespaces=NAMESPACES)):
+                    instr = child.xpath('@w:instr', namespaces=NAMESPACES)[0]
 
                     m = r.match(instr)
                     if not m:
                         raise ValueError('Could not determine name of merge '
                                          'field in value "%s"' % instr)
-                    parent[idx] = Element('MergeField', name=m.group(1))
 
-            for parent in part.iterfind('.//{%(w)s}instrText/../..' % NAMESPACES):
-                children = list(parent)
+                    # Extract original w:r structure to preserve formatting
+                    childspan = child.xpath('w:r', namespaces=NAMESPACES)[0]
+                    childtext = first(childspan.xpath('w:t', namespaces=NAMESPACES))
+                    if childtext is None:
+                        childtext = Element("{%(w)s}t" % NAMESPACES)
+                        childspan.append(childtext)
+                    childtext.set("{%(xml)s}space" % NAMESPACES, "preserve")
+                    childtext.set("{%(int)s}merge-field-name" % NAMESPACES, m.group(1))
+                    parent.insert(parent.index(child),childspan)
+                    parent.remove(child)
+                    
+            # Eliminate duplicate iteration with set
+
+            for parent in set(part.iterfind('.//w:instrText/../..', namespaces=NAMESPACES)):
+                # Eliminated indices to allow on the fly old element deletion
                 fields = zip(
-                    [children.index(e) for e in
-                     parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
-                    [children.index(e) for e in
-                     parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
-                    [e.text for e in
-                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)])
-                for idx_begin, idx_end, instr in fields:
+                    parent.findall('w:r/w:fldChar[@w:fldCharType="begin"]/..', namespaces=NAMESPACES),
+                    parent.findall('w:r/w:fldChar[@w:fldCharType="end"]/..', namespaces=NAMESPACES),
+                    parent.findall('w:r/w:instrText/..', namespaces=NAMESPACES))
+                for beginElm, endElm, instrElm in fields:
+                    instrFld = instrElm.find("w:instrText", namespaces=NAMESPACES)
+                    idx_begin = parent.index(beginElm)
+                    idx_end = parent.index(endElm)
+                    idx_instr = parent.index(instrElm)
+                    instr = instrFld.text
                     m = r.match(instr)
                     if m is None:
                         continue
-                    parent[idx_begin] = Element('MergeField', name=m.group(1))
-                    to_delete += [(parent, parent[i + 1])
-                                  for i in range(idx_begin, idx_end)]
 
-        for parent, child in to_delete:
-            parent.remove(child)
+                    # Original code caused following error due to premature erasing of the initial element, and repeated call to the same parent as a result of xpath evaluation for parent
+                    # New code solves the problem by deleting the fields early
+                    # and by eliminating duplicate iterations
+                    if not (idx_begin < idx_instr and idx_instr < idx_end):
+                        raise ValueError("Invalid word document containing stray instrText element without containing fldChar elements: %d, %d, %d: %s" % (idx_begin, idx_instr, idx_end, instr))
+
+                    # Preserve formatting
+                    # Preserve instrElm
+                    # But remove instrFld
+                    instrElm.remove(instrFld)
+                    # Append new w:t if not present
+                    textFld = first(instrElm.xpath("w:t", namespaces=NAMESPACES))
+                    if textFld is None:
+                        textFld = Element("{%(w)s}t" % NAMESPACES)
+                        textFld.set("{%(xml)s}space" % NAMESPACES, "preserve")
+                        instrElm.append(textFld)
+                    
+                    textFld.set("{%(int)s}merge-field-name" % NAMESPACES, m.group(1))
+                    # Add deletion first
+                    
+                    deleteSet = [parent[i] for i in range(idx_begin, idx_instr)] + [parent[i] for i in range(idx_instr + 1, idx_end)]
+                    
+                    for elem in deleteSet:
+                        parent.remove(elem)
+                print etree.dump(parent)
 
     def write(self, file):
         for field in self.get_merge_fields():
@@ -81,7 +121,7 @@ class MailMerge(object):
         output = ZipFile(file, 'w', ZIP_DEFLATED)
         for zi in self.zip.filelist:
             if zi in self.parts:
-                xml = ElementTree.tostring(self.parts[zi].getroot())
+                xml = etree.tostring(self.parts[zi].getroot())
                 output.writestr(zi.filename, xml)
             else:
                 output.writestr(zi.filename, self.zip.read(zi))
@@ -108,7 +148,7 @@ class MailMerge(object):
         for mf in part.findall('.//MergeField[@name="%s"]' % field):
             mf.clear()
             mf.tag = '{%(w)s}r' % NAMESPACES
-            mf.append(ElementTree.Element('{%(w)s}t' % NAMESPACES))
+            mf.append(Element('{%(w)s}t' % NAMESPACES))
             mf[0].text = text
 
     def merge_rows(self, anchor, rows):
