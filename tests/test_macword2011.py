@@ -16,4 +16,4 @@ class MacWord2011Test(unittest.TestCase):
                        address_line='Helperpark 278d', date='May 22nd, 2013')
 
         with tempfile.NamedTemporaryFile() as outfile:
-            document.write(outfile.name)
+            document.write(outfile)

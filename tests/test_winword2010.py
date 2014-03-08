@@ -17,4 +17,4 @@ class MacWord2011Test(unittest.TestCase):
                        Adresregel_1='Helperpark 278d', Titel='dhr.')
 
         with tempfile.NamedTemporaryFile() as outfile:
-            document.write(outfile.name)
+            document.write(outfile)
