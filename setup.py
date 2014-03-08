@@ -7,6 +7,7 @@ setup(name='docx-mailmerge',
       version=version,
       description='Performs a Mail Merge on docx (Microsoft Office Word) files',
       long_description=open('README.rst').read(),
+      install_requires = ['lxml>=3.1.2', ],
       classifiers=[
           'License :: OSI Approved :: MIT License',
           'Programming Language :: Python :: 2.7',
