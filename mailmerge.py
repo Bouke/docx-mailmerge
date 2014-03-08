@@ -9,6 +9,7 @@ from lxml.etree import ElementTree
 from lxml.etree import Element
 from zipfile import ZipFile, ZIP_DEFLATED
 import warnings
+import itertools
 
 INTERNAL_NAMESPACE = "internal:docx-mailmerge"
 
@@ -86,49 +87,69 @@ class MailMerge(object):
             # Eliminate duplicate iteration with set
 
             for parent in set(part.iterfind('.//w:instrText/../..', namespaces=NAMESPACES)):
-                # Eliminated indices to allow on the fly old element deletion
-                fields = zip(
-                    parent.findall('w:r/w:fldChar[@w:fldCharType="begin"]/..', namespaces=NAMESPACES),
-                    parent.findall('w:r/w:fldChar[@w:fldCharType="end"]/..', namespaces=NAMESPACES),
-                    parent.findall('w:r/w:instrText/..', namespaces=NAMESPACES))
-                for beginElm, endElm, instrElm in fields:
-                    instrFld = instrElm.find("w:instrText", namespaces=NAMESPACES)
-                    idx_begin = parent.index(beginElm)
-                    idx_end = parent.index(endElm)
-                    idx_instr = parent.index(instrElm)
-                    instr = instrFld.text
+                # state machine: capture status, capture begin, captured string + element
+                capturing = False
+                idx_begin = None
+                elem_instr = None
+                capturedInstr = ""
 
-                    fieldName = _extract_mailmerge_instr(instr)
-                    if fieldName is None:
-                        continue
+                for elem in list(parent):
+                    if not capturing:
+                        if elem.find('./w:fldChar[@w:fldCharType="begin"]', namespaces=NAMESPACES) is None:
+                            continue
+                        idx_begin = parent.index(elem)
+                        capturing = True
+                    else:
+                        if elem.find("./w:instrText", namespaces=NAMESPACES) is not None:
+                            if elem_instr is None:
+                                elem_instr = elem
+                            else:
+                                if (elem_instr.find("./w:rPr", namespaces=NAMESPACES) is not None and
+                                    elem.find("./w:rPr", namespaces=NAMESPACES) is not None):
+                                    if (etree.tostring(elem_instr.find("./w:rPr", namespaces=NAMESPACES)) != 
+                                        etree.tostring(elem.find("./w:rPr", namespaces=NAMESPACES))):
+                                        warnings.warn("Found inconsistent styling across two w:instrText tags. Only the first style will be applied.", 
+                                            RuntimeWarning)
 
-                    # Original code caused following error due to premature erasing of the initial element, and repeated call to the same parent as a result of xpath evaluation for parent
-                    # New code solves the problem by deleting the fields early
-                    # and by eliminating duplicate iterations
-                    if not (idx_begin < idx_instr and idx_instr < idx_end):
-                        raise ValueError("Invalid word document containing stray instrText element without containing fldChar elements: %d, %d, %d: %s" % (idx_begin, idx_instr, idx_end, instr))
+                            capturedInstr += elem.find("./w:instrText", namespaces=NAMESPACES).text
+                        elif elem.find('./w:fldChar[@w:fldCharType="end"]', namespaces=NAMESPACES) is not None:
+                            # Process field!
+                            if elem_instr is not None:
+                                fieldName = _extract_mailmerge_instr(capturedInstr)
+                                if fieldName:
+                                    elem_instr.remove(elem_instr.find("./w:instrText", namespaces=NAMESPACES))
 
-                    # Preserve formatting
-                    # Preserve instrElm
-                    # But remove instrFld
-                    instrElm.remove(instrFld)
-                    # Append new w:t if not present
-                    textFld = _first(instrElm.xpath("w:t", namespaces=NAMESPACES))
-                    if textFld is None:
-                        textFld = Element("{%(w)s}t" % NAMESPACES)
-                        textFld.set("{%(xml)s}space" % NAMESPACES, "preserve")
-                        instrElm.append(textFld)
-                    
-                    textFld.set("{%(int)s}merge-field-name" % NAMESPACES, fieldName)
-                    deleteSet = [parent[i] for i in range(idx_begin, idx_instr)] + [parent[i] for i in range(idx_instr + 1, idx_end + 1)]
-                    
-                    for elem in deleteSet:
-                        parent.remove(elem)
+                                    textFld = elem_instr.find("w:t", namespaces=NAMESPACES)
+                                    if textFld is None:
+                                        textFld = Element("{%(w)s}t" % NAMESPACES)
+                                        textFld.set("{%(xml)s}space" % NAMESPACES, "preserve")
+                                        elem_instr.append(textFld)
+
+                                    textFld.set("{%(int)s}merge-field-name" % NAMESPACES, fieldName)
+
+                                    idx_instr = parent.index(elem_instr)
+                                    idx_end = parent.index(elem)
+
+                                    # Must be a chain of two lists or one list, because otherwise the iteration will fail due to the deletion
+                                    for elem in itertools.chain([parent[i] for i in range(idx_begin, idx_instr)], [parent[i] for i in range(idx_instr + 1, idx_end + 1)]):
+                                        parent.remove(elem)
+                            else:
+                                warnings.warn("No w:instrText found between fldChar begin and end. Ignored", RuntimeWarning)
+
+                            # Cleanup
+                            capturing = False
+                            idx_begin = None
+                            elem_instr = None
+                            capturedInstr = ""
+                        else:
+                            continue
+                if capturing:
+                    warnings.warn("fldChar begin not terminated. The field will be lost", RuntimeWarning)
+
 
     def write(self, file):
         for field in self.get_merge_fields():
             self.merge(**{field:''})
-        
         output = ZipFile(file, 'w', ZIP_DEFLATED)
         for zi in self.zip.filelist:
             if zi in self.parts:
