@@ -1,3 +1,4 @@
+#!/usr/bin/env python2
 from setuptools import setup, find_packages
 
 version = '0.1.1'
@@ -18,4 +19,5 @@ setup(name='docx-mailmerge',
       license='MIT',
       py_modules=['mailmerge'],
       zip_safe=False,
+      test_suite="tests",
 )
