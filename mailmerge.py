@@ -19,6 +19,7 @@ CONTENT_TYPES = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
 )
 
+
 class MailMerge(object):
     def __init__(self, file):
         self.zip = ZipFile(file)
@@ -75,8 +76,9 @@ class MailMerge(object):
             parent.remove(child)
 
     def write(self, file):
+        # Replace all remaining merge fields with empty values
         for field in self.get_merge_fields():
-            self.merge(**{field:''})
+            self.merge(**{field: ''})
 
         output = ZipFile(file, 'w', ZIP_DEFLATED)
         for zi in self.zip.filelist:
