@@ -7,7 +7,8 @@ docx Mail Merge
     :target: https://travis-ci.org/Bouke/docx-mailmerge
 
 Performs a Mail Merge on Office Open XML (docx) files. Can be used on any
-system without having to install Microsoft Office Word.
+system without having to install Microsoft Office Word. Supports Python 2.7,
+3.2 and up.
 
 Installation
 ============
