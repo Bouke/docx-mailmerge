@@ -5,7 +5,7 @@ class EtreeMixin(object):
         """
         self.assertEqual(lhs.tag, rhs.tag)
         self.assertEqual(len(lhs), len(rhs))
-        self.assertEqual(lhs.text, rhs.text)
+        self.assertEqual(lhs.text or '', rhs.text or '')
         self.assertEqual(sorted(lhs.items()), sorted(rhs.items()))
         for lhs_child, rhs_child in zip(lhs, rhs):
             self.assert_equal_tree(lhs_child, rhs_child)

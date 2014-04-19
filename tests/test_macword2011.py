@@ -19,7 +19,7 @@ class MacWord2011Test(EtreeMixin, unittest.TestCase):
                        postal_code='9723 ZA', city='Groningen',
                        address_line='Helperpark 278d', date='May 22nd, 2013')
 
-        with tempfile.NamedTemporaryFile() as outfile:
+        with tempfile.TemporaryFile() as outfile:
             document.write(outfile)
 
         expected_tree = ElementTree.fromstring(
