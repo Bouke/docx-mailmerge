@@ -53,6 +53,16 @@ the MergeField replacements.
                          {'col1': 'Row 3, Column 1', 'col2': 'Row 3 Column 1'}]
 
 
+Merge a list. Creates a copy of the template for each item in the list, does a
+merge, and separates the merges by page breaks.
+::
+
+    document.merge_list([
+        {'field1': "Foo", 'field2: "Copy #1"},
+        {'field1': "Bar", 'field2: "Copy #2"},
+    ])
+
+
 Write document to file. This should be a new file, as ``ZipFile`` cannot modify
 existing zip files.
 ::
