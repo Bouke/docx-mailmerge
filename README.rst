@@ -68,6 +68,16 @@ single call to `merge`.
                    ])
 
 
+Duplicate template page. Creates a copy of the template for each item in the
+list, does a merge, and separates the them by page breaks.
+::
+
+    document.merge_pages([
+        {'field1': "Foo", 'field2: "Copy #1"},
+        {'field1': "Bar", 'field2: "Copy #2"},
+    ])
+
+
 Write document to file. This should be a new file, as ``ZipFile`` cannot modify
 existing zip files.
 ::

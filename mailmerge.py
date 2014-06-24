@@ -98,6 +98,37 @@ class MailMerge(object):
                 fields.add(mf.attrib['name'])
         return fields
 
+    def merge_pages(self, replacements):
+        """
+        Duplicate template page. Creates a copy of the template for each item
+        in the list, does a merge, and separates the them by page breaks.
+        """
+        for part in self.parts.values():
+            root = part.getroot()
+
+            tag = root.tag
+            if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
+                continue
+
+            children = []
+            for child in root:
+                root.remove(child)
+                children.append(child)
+
+            for i, repl in enumerate(replacements):
+                # Add page break in between replacements
+                if i > 0:
+                    pagebreak = ElementTree.Element('{%(w)s}br' % NAMESPACES)
+                    pagebreak.attrib['{%(w)s}type' % NAMESPACES] = 'page'
+                    root.append(pagebreak)
+
+                parts = []
+                for child in children:
+                    child_copy = deepcopy(child)
+                    root.append(child_copy)
+                    parts.append(child_copy)
+                self.merge(parts, **repl)
+
     def merge(self, parts=None, **replacements):
         if not parts:
             parts = self.parts.values()
