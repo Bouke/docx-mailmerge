@@ -119,7 +119,10 @@ class MailMerge(object):
         for row_data in rows:
             row = deepcopy(template)
             self.merge([row], **row_data)
-            table.append(row)
+            # fix that the clone of the row will append to the table, 
+            # now the the row will cloned in the correct position
+            #table.append(row) 
+            table.insert(idx, row)
 
     def __find_row_anchor(self, field, parts=None):
         if not parts:
