@@ -103,8 +103,11 @@ class MailMerge(object):
             parts = self.parts.values()
 
         for part in parts:
-            for field, text in replacements.items():
-                self.__merge_field(part, field, text)
+            for field, replacement in replacements.items():
+                if isinstance(replacement, list):
+                    self.merge_rows(field, replacement)
+                else:
+                    self.__merge_field(part, field, replacement)
 
     def __merge_field(self, part, field, text):
         for mf in part.findall('.//MergeField[@name="%s"]' % field):

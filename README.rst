@@ -57,6 +57,17 @@ the MergeField replacements.
                          {'col1': 'Row 3, Column 1', 'col2': 'Row 3 Column 1'}]
 
 
+Starting in version 0.2.0 you can also combine these two separate calls into a
+single call to `merge`.
+::
+
+    document.merge(field1='docx Mail Merge',
+                   col1=[
+                       {'col1': 'A'},
+                       {'col1': 'B'},
+                   ])
+
+
 Write document to file. This should be a new file, as ``ZipFile`` cannot modify
 existing zip files.
 ::
