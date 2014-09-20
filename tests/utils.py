@@ -10,6 +10,7 @@ class EtreeMixin(object):
         for lhs_child, rhs_child in zip(lhs, rhs):
             self.assert_equal_tree(lhs_child, rhs_child)
 
+
 def get_document_body_part(document):
     for part in document.parts.values():
         if part.getroot().tag.endswith('}document'):
