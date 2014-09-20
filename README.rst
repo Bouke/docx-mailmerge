@@ -68,8 +68,9 @@ single call to `merge`.
                    ])
 
 
-Duplicate template page. Creates a copy of the template for each item in the
-list, does a merge, and separates the them by page breaks.
+Starting in version 0.2.0 there's also the feature for template mergingg.
+This creates a copy of the template for each item in the list, does a merge,
+and separates the them by page breaks.
 ::
 
     document.merge_pages([
