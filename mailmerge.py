@@ -116,10 +116,10 @@ class MailMerge(object):
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
         del table[idx]
-        for row_data in rows:
+        for i, row_data in enumerate(rows):
             row = deepcopy(template)
             self.merge([row], **row_data)
-            table.append(row)
+            table.insert(idx + i, row)
 
     def __find_row_anchor(self, field, parts=None):
         if not parts:
