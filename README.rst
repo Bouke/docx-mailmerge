@@ -60,6 +60,16 @@ existing zip files.
     document.write('output.docx')
 
 
+Unit tests
+==========
+
+In order to make sure that the library performs the way it was designed, unit
+tests are used. When providing new features, or fixing bugs, there should be a
+unit test that demonstrates it. Run the test suite::
+
+    python -m unittest discover
+
+
 Todo / Wish List
 ================
 
