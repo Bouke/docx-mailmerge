@@ -60,16 +60,6 @@ existing zip files.
     document.write('output.docx')
 
 
-Unit tests
-==========
-
-In order to make sure that the library performs the way it was designed, unit
-tests are used. When providing new features, or fixing bugs, there should be a
-unit test that demonstrates it. Run the test suite::
-
-    python -m unittest discover
-
-
 Todo / Wish List
 ================
 
@@ -77,8 +67,19 @@ Todo / Wish List
   formatting of the containing text.
 * Image merging.
 
+
 Contributing
 ============
 
 * Fork the repository on GitHub and start hacking
+* Create / fix the unit tests
 * Send a pull request with your changes
+
+Unit tests
+----------
+
+In order to make sure that the library performs the way it was designed, unit
+tests are used. When providing new features, or fixing bugs, there should be a
+unit test that demonstrates it. Run the test suite::
+
+    python -m unittest discover
