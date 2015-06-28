@@ -70,7 +70,7 @@ single call to `merge`.
 
 Starting in version 0.2.0 there's also the feature for template merging.
 This creates a copy of the template for each item in the list, does a merge,
-and separates the them by page breaks.
+and separates them by page breaks.
 ::
 
     document.merge_pages([
