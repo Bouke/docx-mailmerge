@@ -54,7 +54,7 @@ the MergeField replacements.
     document.merge_rows('col1',
                         [{'col1': 'Row 1, Column 1', 'col2': 'Row 1 Column 1'},
                          {'col1': 'Row 2, Column 1', 'col2': 'Row 2 Column 1'},
-                         {'col1': 'Row 3, Column 1', 'col2': 'Row 3 Column 1'}]
+                         {'col1': 'Row 3, Column 1', 'col2': 'Row 3 Column 1'}])
 
 
 Starting in version 0.2.0 you can also combine these two separate calls into a
@@ -68,7 +68,7 @@ single call to `merge`.
                    ])
 
 
-Starting in version 0.2.0 there's also the feature for template mergingg.
+Starting in version 0.2.0 there's also the feature for template merging.
 This creates a copy of the template for each item in the list, does a merge,
 and separates the them by page breaks.
 ::
