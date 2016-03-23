@@ -133,11 +133,11 @@ class MailMerge(object):
         if not parts:
             parts = self.parts.values()
 
-        for part in parts:
-            for field, replacement in replacements.items():
-                if isinstance(replacement, list):
-                    self.merge_rows(field, replacement)
-                else:
+        for field, replacement in replacements.items():
+            if isinstance(replacement, list):
+                self.merge_rows(field, replacement)
+            else:
+                for part in parts:
                     self.__merge_field(part, field, replacement)
 
     def __merge_field(self, part, field, text):
