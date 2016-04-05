@@ -1,3 +1,5 @@
+**This project is currently unmaintained. Not recommended for production use.**
+
 ===============
 docx Mail Merge
 ===============
