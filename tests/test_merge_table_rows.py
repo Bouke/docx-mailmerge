@@ -34,6 +34,31 @@ class MergeTableRowsTest(EtreeMixin, unittest.TestCase):
         self.assert_equal_tree(self.expected_tree,
                                list(self.document.parts.values())[0].getroot())
 
+    def test_merge_rows_no_table(self):
+        """
+        Merging of rows should not fail if there is no table with the given
+        column in the document
+        """
+        self.document.merge(
+            student_name='Bouke Haarsma',
+            study='Industrial Engineering and Management',
+            thesis_grade='A',
+            class_code=[
+                {'class_code': 'ECON101', 'class_name': 'Economics 101', 'class_grade': 'A'},
+                {'class_code': 'ECONADV', 'class_name': 'Economics Advanced', 'class_grade': 'B'},
+                {'class_code': 'OPRES', 'class_name': 'Operations Research', 'class_grade': 'A'},
+            ],
+            no_table=[
+                {'no_table': 'Table not available'}
+            ]
+        )
+
+        with tempfile.TemporaryFile() as outfile:
+            self.document.write(outfile)
+
+        self.assert_equal_tree(self.expected_tree,
+                               list(self.document.parts.values())[0].getroot())
+
     def test_merge_unified(self):
         self.document.merge(
             student_name='Bouke Haarsma',
