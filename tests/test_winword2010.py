@@ -3,11 +3,11 @@ import tempfile
 from os import path
 from xml.etree import ElementTree
 
-from mailmerge import MailMerge
+from mailmerge import MailMerge, NAMESPACES
 from tests.utils import EtreeMixin
 
 
-class MacWord2011Test(EtreeMixin, unittest.TestCase):
+class Windword2010Test(EtreeMixin, unittest.TestCase):
     def test(self):
         document = MailMerge(path.join(path.dirname(__file__), 'test_winword2010.docx'))
         self.assertEqual(document.get_merge_fields(),
@@ -52,3 +52,4 @@ class MacWord2011Test(EtreeMixin, unittest.TestCase):
             'w:top="1417" /><w:cols w:space="708" /><w:docGrid w:linePitch="360" /></w:sectPr></w:body></w:document>')
 
         self.assert_equal_tree(expected_tree, list(document.parts.values())[0].getroot())
+        self.assertIsNone(document.settings.getroot().find('{%(w)s}mailMerge' % NAMESPACES))

@@ -13,35 +13,35 @@ NAMESPACES = {
 for prefix, uri in NAMESPACES.items():
     ElementTree.register_namespace(prefix, uri)
 
-CONTENT_TYPES = (
+CONTENT_TYPES_PARTS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
 )
+
+CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'
 
 
 class MailMerge(object):
     def __init__(self, file):
         self.zip = ZipFile(file)
         self.parts = {}
+        self.settings = None
+        self._settings_info = None
 
         content_types = ElementTree.parse(self.zip.open('[Content_Types].xml'))
         for file in content_types.iterfind('{%(ct)s}Override' % NAMESPACES):
             type = file.attrib['ContentType' % NAMESPACES]
-            if type in CONTENT_TYPES:
-                fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
-                zi = self.zip.getinfo(fn)
-                self.parts[zi] = ElementTree.parse(self.zip.open(zi))
+            if type in CONTENT_TYPES_PARTS:
+                zi, self.parts[zi] = self.__get_tree_of_file(file)
+            elif type == CONTENT_TYPE_SETTINGS:
+                self._settings_info, self.settings = self.__get_tree_of_file(file)
 
         to_delete = []
 
         r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
         for part in self.parts.values():
-            # Remove attribute that soft-links to other namespaces; other namespaces
-            # are not used, so would cause word to throw an error.
-            ignorable_key = '{%(mc)s}Ignorable' % NAMESPACES
-            if ignorable_key in part.getroot().attrib:
-                del part.getroot().attrib[ignorable_key]
+            self.__remove_ignorable_attr(part)
 
             for parent in part.iterfind('.//{%(w)s}fldSimple/..' % NAMESPACES):
                 for idx, child in enumerate(parent):
@@ -75,6 +75,28 @@ class MailMerge(object):
         for parent, child in to_delete:
             parent.remove(child)
 
+        # Remove mail merge settings to avoid error messages when opening document in Winword
+        if self.settings:
+            self.__remove_ignorable_attr(self.settings)
+            settings_root = self.settings.getroot()
+            mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
+            if mail_merge is not None:
+                settings_root.remove(mail_merge)
+
+    def __get_tree_of_file(self, file):
+        fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
+        zi = self.zip.getinfo(fn)
+        return zi, ElementTree.parse(self.zip.open(zi))
+
+    def __remove_ignorable_attr(self, tree):
+        """
+        Remove attribute that soft-links to other namespaces; other namespaces
+        are not used, so would cause word to throw an error.
+        """
+        ignorable_key = '{%(mc)s}Ignorable' % NAMESPACES
+        if ignorable_key in tree.getroot().attrib:
+            del tree.getroot().attrib[ignorable_key]
+
     def write(self, file):
         # Replace all remaining merge fields with empty values
         for field in self.get_merge_fields():
@@ -84,6 +106,9 @@ class MailMerge(object):
         for zi in self.zip.filelist:
             if zi in self.parts:
                 xml = ElementTree.tostring(self.parts[zi].getroot())
+                output.writestr(zi.filename, xml)
+            elif zi == self._settings_info:
+                xml = ElementTree.tostring(self.settings.getroot())
                 output.writestr(zi.filename, xml)
             else:
                 output.writestr(zi.filename, self.zip.read(zi))
