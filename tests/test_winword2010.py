@@ -24,7 +24,9 @@ class Windword2010Test(EtreeMixin, unittest.TestCase):
             document.write(outfile)
 
         expected_tree = etree.fromstring(
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p '
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" '
+            'mc:Ignorable="w14 wp14"><w:body><w:p '
             'w:rsidR="00886208" w:rsidRDefault="00886208"><w:r><w:t>dhr.</w:t></w:r><w:r '
             'w:rsidRPr="00886208"><w:rPr><w:lang w:val="nl-NL" /></w:rPr><w:t xml:space="preserve"> '
             '</w:t></w:r><w:r><w:t>Bouke</w:t></w:r><w:r w:rsidRPr="00886208"><w:rPr><w:lang w:val="nl-NL" '

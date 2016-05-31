@@ -38,7 +38,6 @@ class MailMerge(object):
 
         r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
         for part in self.parts.values():
-            self.__remove_ignorable_attr(part)
 
             for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
                 for idx, child in enumerate(parent):
@@ -74,7 +73,6 @@ class MailMerge(object):
 
         # Remove mail merge settings to avoid error messages when opening document in Winword
         if self.settings:
-            self.__remove_ignorable_attr(self.settings)
             settings_root = self.settings.getroot()
             mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
             if mail_merge is not None:
@@ -84,15 +82,6 @@ class MailMerge(object):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
         zi = self.zip.getinfo(fn)
         return zi, etree.parse(self.zip.open(zi))
-
-    def __remove_ignorable_attr(self, tree):
-        """
-        Remove attribute that soft-links to other namespaces; other namespaces
-        are not used, so would cause word to throw an error.
-        """
-        ignorable_key = '{%(mc)s}Ignorable' % NAMESPACES
-        if ignorable_key in tree.getroot().attrib:
-            del tree.getroot().attrib[ignorable_key]
 
     def write(self, file):
         # Replace all remaining merge fields with empty values
