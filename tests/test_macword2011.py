@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 from os import path
-from xml.etree import ElementTree
+from lxml import etree
 
 from mailmerge import MailMerge
 from tests.utils import EtreeMixin
@@ -22,7 +22,7 @@ class MacWord2011Test(EtreeMixin, unittest.TestCase):
         with tempfile.TemporaryFile() as outfile:
             document.write(outfile)
 
-        expected_tree = ElementTree.fromstring(
+        expected_tree = etree.fromstring(
             '<w:document xmlns:ns1="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w="http://schemas'
             '.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p ns1:paraId="25CDEC86" ns1:textId="77777777" '
             'w:rsidR="00FB567A" w:rsidRDefault="00541684"><w:r><w:t>Bouke</w:t></w:r><w:r w:rsidR="00916690"><w:t '
