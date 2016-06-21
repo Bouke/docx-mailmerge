@@ -46,9 +46,8 @@ class MailMerge(object):
                     instr = child.attrib['{%(w)s}instr' % NAMESPACES]
 
                     m = r.match(instr)
-                    if not m:
-                        raise ValueError('Could not determine name of merge '
-                                         'field in value "%s"' % instr)
+                    if m is None:
+                        continue
                     parent[idx] = Element('MergeField', name=m.group(1))
 
             for parent in part.findall('.//{%(w)s}instrText/../..' % NAMESPACES):
