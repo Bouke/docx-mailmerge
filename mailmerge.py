@@ -64,13 +64,15 @@ class MailMerge(object):
                 )
 
                 for idx_begin, idx_end, instr, block in fields:
-                    block.remove(instr)
                     m = r.match(instr.text)
                     if m is None:
                         continue
                     parent[idx_begin] = Element('MergeField', name=m.group(1))
+
                     # append the other tags in the w:r block too
+                    block.remove(instr)
                     parent[idx_begin].extend(list(block))
+
                     to_delete += [(parent, parent[i + 1])
                                   for i in range(idx_begin, idx_end)]
 
