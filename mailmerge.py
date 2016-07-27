@@ -58,18 +58,17 @@ class MailMerge(object):
                     [children.index(e) for e in
                      parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
                     [e for e in
-                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)],
-                    [e for e in
-                     parent.findall('{%(w)s}r/{%(w)s}instrText/..' % NAMESPACES)]
+                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)]
                 )
 
-                for idx_begin, idx_end, instr, block in fields:
+                for idx_begin, idx_end, instr in fields:
                     m = r.match(instr.text)
                     if m is None:
                         continue
                     parent[idx_begin] = Element('MergeField', name=m.group(1))
 
                     # append the other tags in the w:r block too
+                    block = instr.getparent()
                     block.remove(instr)
                     parent[idx_begin].extend(list(block))
 
