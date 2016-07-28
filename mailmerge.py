@@ -68,8 +68,8 @@ class MailMerge(object):
                     parent[idx_begin] = Element('MergeField', name=m.group(1))
 
                     # append the other tags in the w:r block too
+                    instr.tag = 'MergeText'
                     block = instr.getparent()
-                    block.remove(instr)
                     parent[idx_begin].extend(list(block))
 
                     to_delete += [(parent, parent[i + 1])
@@ -161,14 +161,18 @@ class MailMerge(object):
     def __merge_field(self, part, field, text):
         for mf in part.findall('.//MergeField[@name="%s"]' % field):
             children = list(mf)
-            mf.clear()
-
+            mf.clear()  # clear away the attributes
             mf.tag = '{%(w)s}r' % NAMESPACES
-            mf.extend(children)  # appends the styling
+            mf.extend(children)
 
             text_node = Element('{%(w)s}t' % NAMESPACES)
             text_node.text = text
-            mf.append(text_node)
+
+            ph = mf.find('MergeText')
+            if ph is not None:
+                mf.replace(ph, text_node)
+            else:
+                mf.append(text_node)
 
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
