@@ -67,9 +67,10 @@ class MailMerge(object):
                         continue
                     parent[idx_begin] = Element('MergeField', name=m.group(1))
 
-                    # append the other tags in the w:r block too
+                    # use this so we know *where* to put the replacement
                     instr.tag = 'MergeText'
                     block = instr.getparent()
+                    # append the other tags in the w:r block too
                     parent[idx_begin].extend(list(block))
 
                     to_delete += [(parent, parent[i + 1])
@@ -170,6 +171,8 @@ class MailMerge(object):
 
             ph = mf.find('MergeText')
             if ph is not None:
+                # only in case of instrText is being used (instead of
+                # fldSimple) this node was added in the process
                 mf.replace(ph, text_node)
             else:
                 mf.append(text_node)
