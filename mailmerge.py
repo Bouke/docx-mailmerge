@@ -20,11 +20,12 @@ CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordproce
 
 
 class MailMerge(object):
-    def __init__(self, file):
+    def __init__(self, file, remove_empty_tables=False):
         self.zip = ZipFile(file)
         self.parts = {}
         self.settings = None
         self._settings_info = None
+        self.remove_empty_tables = remove_empty_tables
 
         content_types = etree.parse(self.zip.open('[Content_Types].xml'))
         for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
@@ -177,11 +178,18 @@ class MailMerge(object):
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
         if table is not None:
-            del table[idx]
-            for i, row_data in enumerate(rows):
-                row = deepcopy(template)
-                self.merge([row], **row_data)
-                table.insert(idx + i, row)
+            if len(rows) > 0:
+                del table[idx]
+                for i, row_data in enumerate(rows):
+                    row = deepcopy(template)
+                    self.merge([row], **row_data)
+                    table.insert(idx + i, row)
+            else:
+                # if there is no data for a given table
+                # we check whether table needs to be removed
+                if self.remove_empty_tables:
+                    parent = table.getparent()
+                    parent.remove(table)
 
     def __find_row_anchor(self, field, parts=None):
         if not parts:
