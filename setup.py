@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 version = '0.2.0'
 
@@ -20,4 +20,5 @@ setup(name='docx-mailmerge',
       license='MIT',
       py_modules=['mailmerge'],
       zip_safe=False,
+      install_requires=['lxml']
 )

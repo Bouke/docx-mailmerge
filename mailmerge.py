@@ -1,7 +1,7 @@
 from copy import deepcopy
 import re
-from xml.etree import ElementTree
-from xml.etree.ElementTree import Element
+from lxml.etree import Element
+from lxml import etree
 from zipfile import ZipFile, ZIP_DEFLATED
 
 NAMESPACES = {
@@ -10,52 +10,47 @@ NAMESPACES = {
     'ct': 'http://schemas.openxmlformats.org/package/2006/content-types',
 }
 
-for prefix, uri in NAMESPACES.items():
-    ElementTree.register_namespace(prefix, uri)
-
-CONTENT_TYPES = (
+CONTENT_TYPES_PARTS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
 )
+
+CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'
 
 
 class MailMerge(object):
     def __init__(self, file):
         self.zip = ZipFile(file)
         self.parts = {}
+        self.settings = None
+        self._settings_info = None
 
-        content_types = ElementTree.parse(self.zip.open('[Content_Types].xml'))
-        for file in content_types.iterfind('{%(ct)s}Override' % NAMESPACES):
+        content_types = etree.parse(self.zip.open('[Content_Types].xml'))
+        for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
             type = file.attrib['ContentType' % NAMESPACES]
-            if type in CONTENT_TYPES:
-                fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
-                zi = self.zip.getinfo(fn)
-                self.parts[zi] = ElementTree.parse(self.zip.open(zi))
+            if type in CONTENT_TYPES_PARTS:
+                zi, self.parts[zi] = self.__get_tree_of_file(file)
+            elif type == CONTENT_TYPE_SETTINGS:
+                self._settings_info, self.settings = self.__get_tree_of_file(file)
 
         to_delete = []
 
         r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
         for part in self.parts.values():
-            # Remove attribute that soft-links to other namespaces; other namespaces
-            # are not used, so would cause word to throw an error.
-            ignorable_key = '{%(mc)s}Ignorable' % NAMESPACES
-            if ignorable_key in part.getroot().attrib:
-                del part.getroot().attrib[ignorable_key]
 
-            for parent in part.iterfind('.//{%(w)s}fldSimple/..' % NAMESPACES):
+            for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
                 for idx, child in enumerate(parent):
                     if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
                         continue
                     instr = child.attrib['{%(w)s}instr' % NAMESPACES]
 
                     m = r.match(instr)
-                    if not m:
-                        raise ValueError('Could not determine name of merge '
-                                         'field in value "%s"' % instr)
+                    if m is None:
+                        continue
                     parent[idx] = Element('MergeField', name=m.group(1))
 
-            for parent in part.iterfind('.//{%(w)s}instrText/../..' % NAMESPACES):
+            for parent in part.findall('.//{%(w)s}instrText/../..' % NAMESPACES):
                 children = list(parent)
                 fields = zip(
                     [children.index(e) for e in
@@ -75,6 +70,18 @@ class MailMerge(object):
         for parent, child in to_delete:
             parent.remove(child)
 
+        # Remove mail merge settings to avoid error messages when opening document in Winword
+        if self.settings:
+            settings_root = self.settings.getroot()
+            mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
+            if mail_merge is not None:
+                settings_root.remove(mail_merge)
+
+    def __get_tree_of_file(self, file):
+        fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
+        zi = self.zip.getinfo(fn)
+        return zi, etree.parse(self.zip.open(zi))
+
     def write(self, file):
         # Replace all remaining merge fields with empty values
         for field in self.get_merge_fields():
@@ -83,7 +90,10 @@ class MailMerge(object):
         output = ZipFile(file, 'w', ZIP_DEFLATED)
         for zi in self.zip.filelist:
             if zi in self.parts:
-                xml = ElementTree.tostring(self.parts[zi].getroot())
+                xml = etree.tostring(self.parts[zi].getroot())
+                output.writestr(zi.filename, xml)
+            elif zi == self._settings_info:
+                xml = etree.tostring(self.settings.getroot())
                 output.writestr(zi.filename, xml)
             else:
                 output.writestr(zi.filename, self.zip.read(zi))
@@ -118,7 +128,7 @@ class MailMerge(object):
             for i, repl in enumerate(replacements):
                 # Add page break in between replacements
                 if i > 0:
-                    pagebreak = ElementTree.Element('{%(w)s}br' % NAMESPACES)
+                    pagebreak = Element('{%(w)s}br' % NAMESPACES)
                     pagebreak.attrib['{%(w)s}type' % NAMESPACES] = 'page'
                     root.append(pagebreak)
 
@@ -144,7 +154,7 @@ class MailMerge(object):
         for mf in part.findall('.//MergeField[@name="%s"]' % field):
             mf.clear()
             mf.tag = '{%(w)s}r' % NAMESPACES
-            mf.append(ElementTree.Element('{%(w)s}t' % NAMESPACES))
+            mf.append(Element('{%(w)s}t' % NAMESPACES))
             mf[0].text = text
 
     def merge_rows(self, anchor, rows):
@@ -160,7 +170,7 @@ class MailMerge(object):
         if not parts:
             parts = self.parts.values()
         for part in parts:
-            for table in part.iterfind('.//{%(w)s}tbl' % NAMESPACES):
+            for table in part.findall('.//{%(w)s}tbl' % NAMESPACES):
                 for idx, row in enumerate(table):
                     if row.find('.//MergeField[@name="%s"]' % field) is not None:
                         return table, idx, row

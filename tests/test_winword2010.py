@@ -1,13 +1,13 @@
 import unittest
 import tempfile
 from os import path
-from xml.etree import ElementTree
+from lxml import etree
 
-from mailmerge import MailMerge
+from mailmerge import MailMerge, NAMESPACES
 from tests.utils import EtreeMixin
 
 
-class MacWord2011Test(EtreeMixin, unittest.TestCase):
+class Windword2010Test(EtreeMixin, unittest.TestCase):
     def test(self):
         document = MailMerge(path.join(path.dirname(__file__), 'test_winword2010.docx'))
         self.assertEqual(document.get_merge_fields(),
@@ -23,8 +23,10 @@ class MacWord2011Test(EtreeMixin, unittest.TestCase):
         with tempfile.NamedTemporaryFile() as outfile:
             document.write(outfile)
 
-        expected_tree = ElementTree.fromstring(
-            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p '
+        expected_tree = etree.fromstring(
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" '
+            'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" '
+            'mc:Ignorable="w14 wp14"><w:body><w:p '
             'w:rsidR="00886208" w:rsidRDefault="00886208"><w:r><w:t>dhr.</w:t></w:r><w:r '
             'w:rsidRPr="00886208"><w:rPr><w:lang w:val="nl-NL" /></w:rPr><w:t xml:space="preserve"> '
             '</w:t></w:r><w:r><w:t>Bouke</w:t></w:r><w:r w:rsidRPr="00886208"><w:rPr><w:lang w:val="nl-NL" '
@@ -52,3 +54,4 @@ class MacWord2011Test(EtreeMixin, unittest.TestCase):
             'w:top="1417" /><w:cols w:space="708" /><w:docGrid w:linePitch="360" /></w:sectPr></w:body></w:document>')
 
         self.assert_equal_tree(expected_tree, list(document.parts.values())[0].getroot())
+        self.assertIsNone(document.settings.getroot().find('{%(w)s}mailMerge' % NAMESPACES))
