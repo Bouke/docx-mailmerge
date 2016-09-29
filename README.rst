@@ -89,8 +89,6 @@ existing zip files.
 Todo / Wish List
 ================
 
-* Preserve formatting of the merge field, currently it defaults to the
-  formatting of the containing text.
 * Image merging.
 
 
