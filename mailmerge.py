@@ -57,13 +57,21 @@ class MailMerge(object):
                      parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
                     [children.index(e) for e in
                      parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
-                    [e.text for e in
-                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)])
+                    [e for e in
+                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)]
+                )
+
                 for idx_begin, idx_end, instr in fields:
-                    m = r.match(instr)
+                    m = r.match(instr.text)
                     if m is None:
                         continue
                     parent[idx_begin] = Element('MergeField', name=m.group(1))
+
+                    # append the other tags in the w:r block too
+                    instr.tag = 'MergeText'
+                    block = instr.getparent()
+                    parent[idx_begin].extend(list(block))
+
                     to_delete += [(parent, parent[i + 1])
                                   for i in range(idx_begin, idx_end)]
 
@@ -152,10 +160,19 @@ class MailMerge(object):
 
     def __merge_field(self, part, field, text):
         for mf in part.findall('.//MergeField[@name="%s"]' % field):
-            mf.clear()
+            children = list(mf)
+            mf.clear()  # clear away the attributes
             mf.tag = '{%(w)s}r' % NAMESPACES
-            mf.append(Element('{%(w)s}t' % NAMESPACES))
-            mf[0].text = text
+            mf.extend(children)
+
+            text_node = Element('{%(w)s}t' % NAMESPACES)
+            text_node.text = text
+
+            ph = mf.find('MergeText')
+            if ph is not None:
+                mf.replace(ph, text_node)
+            else:
+                mf.append(text_node)
 
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
