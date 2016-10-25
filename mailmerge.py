@@ -166,16 +166,29 @@ class MailMerge(object):
             mf.tag = '{%(w)s}r' % NAMESPACES
             mf.extend(children)
 
-            text_node = Element('{%(w)s}t' % NAMESPACES)
-            text_node.text = text
+            nodes = []
+            # preserve new lines in replacement text
+            text = text or ''  # text might be None
+            text_parts = text.replace('\r', '').split('\n')
+            for i, text_part in enumerate(text_parts):
+                text_node = Element('{%(w)s}t' % NAMESPACES)
+                text_node.text = text_part
+                nodes.append(text_node)
+
+                # if not last node add new line node
+                if i < (len(text_parts) - 1):
+                    nodes.append(Element('{%(w)s}br' % NAMESPACES))
 
             ph = mf.find('MergeText')
             if ph is not None:
-                # only in case of instrText is being used (instead of
-                # fldSimple) this node was added in the process
-                mf.replace(ph, text_node)
+                # add text nodes at the exact position where
+                # MergeText was found
+                index = mf.index(ph)
+                for node in reversed(nodes):
+                    mf.insert(index, node)
+                mf.remove(ph)
             else:
-                mf.append(text_node)
+                mf.extend(nodes)
 
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
