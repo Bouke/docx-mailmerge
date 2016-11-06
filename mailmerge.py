@@ -67,9 +67,10 @@ class MailMerge(object):
                         continue
                     parent[idx_begin] = Element('MergeField', name=m.group(1))
 
-                    # append the other tags in the w:r block too
+                    # use this so we know *where* to put the replacement
                     instr.tag = 'MergeText'
                     block = instr.getparent()
+                    # append the other tags in the w:r block too
                     parent[idx_begin].extend(list(block))
 
                     to_delete += [(parent, parent[i + 1])
@@ -165,14 +166,29 @@ class MailMerge(object):
             mf.tag = '{%(w)s}r' % NAMESPACES
             mf.extend(children)
 
-            text_node = Element('{%(w)s}t' % NAMESPACES)
-            text_node.text = text
+            nodes = []
+            # preserve new lines in replacement text
+            text = text or ''  # text might be None
+            text_parts = text.replace('\r', '').split('\n')
+            for i, text_part in enumerate(text_parts):
+                text_node = Element('{%(w)s}t' % NAMESPACES)
+                text_node.text = text_part
+                nodes.append(text_node)
+
+                # if not last node add new line node
+                if i < (len(text_parts) - 1):
+                    nodes.append(Element('{%(w)s}br' % NAMESPACES))
 
             ph = mf.find('MergeText')
             if ph is not None:
-                mf.replace(ph, text_node)
+                # add text nodes at the exact position where
+                # MergeText was found
+                index = mf.index(ph)
+                for node in reversed(nodes):
+                    mf.insert(index, node)
+                mf.remove(ph)
             else:
-                mf.append(text_node)
+                mf.extend(nodes)
 
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)

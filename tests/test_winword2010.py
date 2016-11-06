@@ -18,7 +18,7 @@ class Windword2010Test(EtreeMixin, unittest.TestCase):
         document.merge(Voornaam='Bouke', Achternaam='Haarsma',
                        Land_of_regio='The Netherlands', Provincie=None,
                        Postcode='9723 ZA', Plaats='Groningen',
-                       Adresregel_1='Helperpark 278d', Titel='dhr.')
+                       Adresregel_1='Helperpark 278d\nP.O. Box', Titel='dhr.')
 
         with tempfile.NamedTemporaryFile() as outfile:
             document.write(outfile)
@@ -69,6 +69,8 @@ class Windword2010Test(EtreeMixin, unittest.TestCase):
                       '<w:lang w:val="nl-NL"/>'
                     '</w:rPr>'
                     '<w:t>Helperpark 278d</w:t>'
+                    '<w:br/>'
+                    '<w:t>P.O. Box</w:t>'
                   '</w:r>'
                 '</w:p>'
                 '<w:p w:rsidR="00886208" w:rsidRDefault="00886208">'
