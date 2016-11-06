@@ -3,7 +3,7 @@ import tempfile
 from os import path
 from lxml import etree
 
-from mailmerge import MailMerge
+from mailmerge import MailMerge, NAMESPACES
 from tests.utils import EtreeMixin
 
 
@@ -58,6 +58,24 @@ class MergeTableRowsTest(EtreeMixin, unittest.TestCase):
 
         self.assert_equal_tree(self.expected_tree,
                                list(self.document.parts.values())[0].getroot())
+
+    def test_merge_rows_remove_table(self):
+        """
+        When flag is set and there is no data in a table, table needs to be removed
+        """
+        self.document.remove_empty_tables = True
+        self.document.merge(
+            student_name='Bouke Haarsma',
+            study='Industrial Engineering and Management',
+            thesis_grade='A',
+            class_code=[]
+        )
+
+        with tempfile.TemporaryFile() as outfile:
+            self.document.write(outfile)
+        self.assertIsNone(
+            list(self.document.parts.values())[0].getroot().find('.//{%(w)s}tbl' % NAMESPACES)
+        )
 
     def test_merge_unified(self):
         self.document.merge(
