@@ -85,6 +85,8 @@ existing zip files.
 
     document.write('output.docx')
 
+See also the unit tests and this nice write-up `Populating MS Word Templates
+with Python`_ on Practical Business Python for more information and examples.
 
 Todo / Wish List
 ================
@@ -114,3 +116,4 @@ Credits
 This library was written by `Bouke Haarsma`_ and contributors.
 
 .. _Bouke Haarsma: https://twitter.com/BoukeHaarsma
+.. _Populating MS Word Templates with Python: http://pbpython.com/python-word-template.html
