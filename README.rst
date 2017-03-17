@@ -107,3 +107,10 @@ tests are used. When providing new features, or fixing bugs, there should be a
 unit test that demonstrates it. Run the test suite::
 
     python -m unittest discover
+
+Credits
+=======
+
+This library was written by `Bouke Haarsma`_ and contributors.
+
+.. _Bouke Haarsma: https://twitter.com/BoukeHaarsma
