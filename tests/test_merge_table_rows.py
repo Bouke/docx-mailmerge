@@ -94,3 +94,6 @@ class MergeTableRowsTest(EtreeMixin, unittest.TestCase):
 
         self.assert_equal_tree(self.expected_tree,
                                list(self.document.parts.values())[0].getroot())
+
+    def tearDown(self):
+        self.document.close()

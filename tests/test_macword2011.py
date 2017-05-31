@@ -9,18 +9,18 @@ from tests.utils import EtreeMixin
 
 class MacWord2011Test(EtreeMixin, unittest.TestCase):
     def test(self):
-        document = MailMerge(path.join(path.dirname(__file__), 'test_macword2011.docx'))
-        self.assertEqual(document.get_merge_fields(),
-                         set(['first_name', 'last_name', 'country', 'state',
-                              'postal_code', 'date', 'address_line', 'city']))
+        with MailMerge(path.join(path.dirname(__file__), 'test_macword2011.docx')) as document:
+            self.assertEqual(document.get_merge_fields(),
+                             set(['first_name', 'last_name', 'country', 'state',
+                                  'postal_code', 'date', 'address_line', 'city']))
 
-        document.merge(first_name='Bouke', last_name='Haarsma',
-                       country='The Netherlands', state=None,
-                       postal_code='9723 ZA', city='Groningen',
-                       address_line='Helperpark 278d', date='May 22nd, 2013')
+            document.merge(first_name='Bouke', last_name='Haarsma',
+                           country='The Netherlands', state=None,
+                           postal_code='9723 ZA', city='Groningen',
+                           address_line='Helperpark 278d', date='May 22nd, 2013')
 
-        with tempfile.TemporaryFile() as outfile:
-            document.write(outfile)
+            with tempfile.TemporaryFile() as outfile:
+                document.write(outfile)
 
         expected_tree = etree.fromstring(
             '<w:document xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" '

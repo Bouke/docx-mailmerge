@@ -57,3 +57,5 @@ class MergeTableRowsMultipartTest(EtreeMixin, unittest.TestCase):
             if (part.getroot().tag == '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document'):
                 self.assert_equal_tree(self.expected_tree, part.getroot())
 
+    def tearDown(self):
+        self.document.close()

@@ -27,65 +27,69 @@ class MailMerge(object):
         self._settings_info = None
         self.remove_empty_tables = remove_empty_tables
 
-        content_types = etree.parse(self.zip.open('[Content_Types].xml'))
-        for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
-            type = file.attrib['ContentType' % NAMESPACES]
-            if type in CONTENT_TYPES_PARTS:
-                zi, self.parts[zi] = self.__get_tree_of_file(file)
-            elif type == CONTENT_TYPE_SETTINGS:
-                self._settings_info, self.settings = self.__get_tree_of_file(file)
+        try:
+            content_types = etree.parse(self.zip.open('[Content_Types].xml'))
+            for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
+                type = file.attrib['ContentType' % NAMESPACES]
+                if type in CONTENT_TYPES_PARTS:
+                    zi, self.parts[zi] = self.__get_tree_of_file(file)
+                elif type == CONTENT_TYPE_SETTINGS:
+                    self._settings_info, self.settings = self.__get_tree_of_file(file)
 
-        to_delete = []
+            to_delete = []
 
-        r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
-        for part in self.parts.values():
+            r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
+            for part in self.parts.values():
 
-            for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
-                for idx, child in enumerate(parent):
-                    if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
-                        continue
-                    instr = child.attrib['{%(w)s}instr' % NAMESPACES]
+                for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
+                    for idx, child in enumerate(parent):
+                        if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
+                            continue
+                        instr = child.attrib['{%(w)s}instr' % NAMESPACES]
 
-                    m = r.match(instr)
-                    if m is None:
-                        continue
-                    parent[idx] = Element('MergeField', name=m.group(1))
+                        m = r.match(instr)
+                        if m is None:
+                            continue
+                        parent[idx] = Element('MergeField', name=m.group(1))
 
-            for parent in part.findall('.//{%(w)s}instrText/../..' % NAMESPACES):
-                children = list(parent)
-                fields = zip(
-                    [children.index(e) for e in
-                     parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
-                    [children.index(e) for e in
-                     parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
-                    [e for e in
-                     parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)]
-                )
+                for parent in part.findall('.//{%(w)s}instrText/../..' % NAMESPACES):
+                    children = list(parent)
+                    fields = zip(
+                        [children.index(e) for e in
+                         parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
+                        [children.index(e) for e in
+                         parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
+                        [e for e in
+                         parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)]
+                    )
 
-                for idx_begin, idx_end, instr in fields:
-                    m = r.match(instr.text)
-                    if m is None:
-                        continue
-                    parent[idx_begin] = Element('MergeField', name=m.group(1))
+                    for idx_begin, idx_end, instr in fields:
+                        m = r.match(instr.text)
+                        if m is None:
+                            continue
+                        parent[idx_begin] = Element('MergeField', name=m.group(1))
 
-                    # use this so we know *where* to put the replacement
-                    instr.tag = 'MergeText'
-                    block = instr.getparent()
-                    # append the other tags in the w:r block too
-                    parent[idx_begin].extend(list(block))
+                        # use this so we know *where* to put the replacement
+                        instr.tag = 'MergeText'
+                        block = instr.getparent()
+                        # append the other tags in the w:r block too
+                        parent[idx_begin].extend(list(block))
 
-                    to_delete += [(parent, parent[i + 1])
-                                  for i in range(idx_begin, idx_end)]
+                        to_delete += [(parent, parent[i + 1])
+                                      for i in range(idx_begin, idx_end)]
 
-        for parent, child in to_delete:
-            parent.remove(child)
+            for parent, child in to_delete:
+                parent.remove(child)
 
-        # Remove mail merge settings to avoid error messages when opening document in Winword
-        if self.settings:
-            settings_root = self.settings.getroot()
-            mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
-            if mail_merge is not None:
-                settings_root.remove(mail_merge)
+            # Remove mail merge settings to avoid error messages when opening document in Winword
+            if self.settings:
+                settings_root = self.settings.getroot()
+                mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
+                if mail_merge is not None:
+                    settings_root.remove(mail_merge)
+        except:
+            self.zip.close()
+            raise
 
     def __get_tree_of_file(self, file):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
@@ -97,17 +101,16 @@ class MailMerge(object):
         for field in self.get_merge_fields():
             self.merge(**{field: ''})
 
-        output = ZipFile(file, 'w', ZIP_DEFLATED)
-        for zi in self.zip.filelist:
-            if zi in self.parts:
-                xml = etree.tostring(self.parts[zi].getroot())
-                output.writestr(zi.filename, xml)
-            elif zi == self._settings_info:
-                xml = etree.tostring(self.settings.getroot())
-                output.writestr(zi.filename, xml)
-            else:
-                output.writestr(zi.filename, self.zip.read(zi))
-        output.close()
+        with ZipFile(file, 'w', ZIP_DEFLATED) as output:
+            for zi in self.zip.filelist:
+                if zi in self.parts:
+                    xml = etree.tostring(self.parts[zi].getroot())
+                    output.writestr(zi.filename, xml)
+                elif zi == self._settings_info:
+                    xml = etree.tostring(self.settings.getroot())
+                    output.writestr(zi.filename, xml)
+                else:
+                    output.writestr(zi.filename, self.zip.read(zi))
 
     def get_merge_fields(self, parts=None):
         if not parts:
@@ -216,3 +219,16 @@ class MailMerge(object):
                     if row.find('.//MergeField[@name="%s"]' % field) is not None:
                         return table, idx, row
         return None, None, None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
+
+    def close(self):
+        if self.zip is not None:
+            try:
+                self.zip.close()
+            finally:
+                self.zip = None
