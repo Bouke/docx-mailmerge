@@ -30,7 +30,8 @@ Open the file.
 ::
 
     from mailmerge import MailMerge
-    document = MailMerge('input.docx')
+    with MailMerge('input.docx') as document:
+        ...
 
 
 List all merge fields.

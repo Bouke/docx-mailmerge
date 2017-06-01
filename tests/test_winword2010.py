@@ -9,19 +9,19 @@ from tests.utils import EtreeMixin
 
 class Windword2010Test(EtreeMixin, unittest.TestCase):
     def test(self):
-        document = MailMerge(path.join(path.dirname(__file__), 'test_winword2010.docx'))
-        self.assertEqual(document.get_merge_fields(),
-                         set(['Titel', 'Voornaam', 'Achternaam',
-                              'Adresregel_1', 'Postcode', 'Plaats',
-                              'Provincie', 'Land_of_regio']))
+        with MailMerge(path.join(path.dirname(__file__), 'test_winword2010.docx')) as document:
+            self.assertEqual(document.get_merge_fields(),
+                             set(['Titel', 'Voornaam', 'Achternaam',
+                                  'Adresregel_1', 'Postcode', 'Plaats',
+                                  'Provincie', 'Land_of_regio']))
 
-        document.merge(Voornaam='Bouke', Achternaam='Haarsma',
-                       Land_of_regio='The Netherlands', Provincie=None,
-                       Postcode='9723 ZA', Plaats='Groningen',
-                       Adresregel_1='Helperpark 278d\nP.O. Box', Titel='dhr.')
+            document.merge(Voornaam='Bouke', Achternaam='Haarsma',
+                           Land_of_regio='The Netherlands', Provincie=None,
+                           Postcode='9723 ZA', Plaats='Groningen',
+                           Adresregel_1='Helperpark 278d\nP.O. Box', Titel='dhr.')
 
-        with tempfile.NamedTemporaryFile() as outfile:
-            document.write(outfile)
+            with tempfile.NamedTemporaryFile() as outfile:
+                document.write(outfile)
 
         expected_tree = etree.fromstring(
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w14 wp14">'  # noqa
