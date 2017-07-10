@@ -58,20 +58,35 @@ class MailMerge(object):
                         [children.index(e) for e in
                          parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
                         [children.index(e) for e in
-                         parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)],
-                        [e for e in
-                         parent.findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)]
+                         parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)]
                     )
 
-                    for idx_begin, idx_end, instr in fields:
-                        m = r.match(instr.text)
+                    for idx_begin, idx_end in fields:
+                        # consolidate all instrText nodes between'begin' and 'end' into a single node
+                        begin = children[idx_begin]
+                        instr_elements = [e for e in
+                                          begin.getparent().findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)
+                                          if idx_begin < children.index(e.getparent()) < idx_end]
+                        if len(instr_elements) == 0:
+                            continue
+
+                        # set the text of the first instrText element to the concatenation
+                        # of all the instrText element texts
+                        instr_text = ''.join([e.text for e in instr_elements])
+                        instr_elements[0].text = instr_text
+
+                        # delete all instrText elements except the first
+                        for instr in instr_elements[1:]:
+                            instr.getparent().remove(instr)
+
+                        m = r.match(instr_text)
                         if m is None:
                             continue
                         parent[idx_begin] = Element('MergeField', name=m.group(1))
 
                         # use this so we know *where* to put the replacement
-                        instr.tag = 'MergeText'
-                        block = instr.getparent()
+                        instr_elements[0].tag = 'MergeText'
+                        block = instr_elements[0].getparent()
                         # append the other tags in the w:r block too
                         parent[idx_begin].extend(list(block))
 
