@@ -34,7 +34,7 @@ Open the file.
         ...
 
 
-List all merge fields.
+List all merge fields, by default as Set; optionally pass return_list=True
 ::
 
     print document.get_merge_fields()

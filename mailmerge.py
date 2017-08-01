@@ -127,14 +127,20 @@ class MailMerge(object):
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
 
-    def get_merge_fields(self, parts=None):
+    def get_merge_fields(self, return_list=False, parts=None):
+        '''default return set(<file merge_fields>) scrambles file merge field
+        order; optional return_list maintains that order - helpful for e.g.
+        sequential pyparsing content from other documents'''
         if not parts:
             parts = self.parts.values()
-        fields = set()
+        fields = list()
         for part in parts:
             for mf in part.findall('.//MergeField'):
-                fields.add(mf.attrib['name'])
-        return fields
+                fields.append(mf.attrib['name'])
+        if return_list:
+            return fields
+        else:
+            return set(fields)
 
     def merge_pages(self, replacements):
         """
