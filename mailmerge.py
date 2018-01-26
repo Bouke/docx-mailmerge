@@ -3,6 +3,7 @@ import re
 from lxml.etree import Element
 from lxml import etree
 from zipfile import ZipFile, ZIP_DEFLATED
+import xml.etree.ElementTree as ET
 
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -138,35 +139,134 @@ class MailMerge(object):
 
     def merge_pages(self, replacements):
         """
-        Duplicate template page. Creates a copy of the template for each item
-        in the list, does a merge, and separates the them by page breaks.
+        Duplicate template. Creates a copy of the template, does a merge, and separates the them by a page break.
+        No modification of sections.
         """
-        for part in self.parts.values():
+        
+        for part in self.parts.values():       
             root = part.getroot()
+            tag = root.tag
+            if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
+                continue                                
+            
+            #FINDING LAST SECTION OF THE DOCUMENT
+            lastSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)           
+            
+            #SAVING LAST SECTION
+            mainSection = deepcopy(lastSection)
+            lsecRoot = lastSection.getparent()
+            lsecRoot.remove(lastSection)
+            
+            #COPY CHILD ELEMENTS OF BODY IN A LIST
+            childrenList = root.findall('w:body/*', namespaces=NAMESPACES)       
 
+            #DELETE ALL SUBELEMENTS OF BODY
+            for child in root:
+                if child.tag == '{%(w)s}body' % NAMESPACES:
+                    child.clear()
+    
+            #REFILL BODY, ADD PAGE BREAK, ADD LAST SECTION AND MERGE DOCS
+            lr = len(replacements)
+            lc = len(childrenList)
+            parts = []
+            for i, repl in enumerate(replacements):
+                for (j, n) in enumerate(childrenList):
+                    element = deepcopy(n)
+                    for child in root:
+                        if child.tag == '{%(w)s}body' % NAMESPACES:
+                            child.append(element)
+                            parts.append(element)
+                            if (j + 1) == lc:
+                                if (i + 1) == lr:
+                                    child.append(mainSection)
+                                    parts.append(mainSection)
+                                else:
+                                    #Page break
+                                    pb   = ET.SubElement(child, '{%(w)s}p'  % NAMESPACES)
+                                    r = ET.SubElement(pb, '{%(w)s}r'  % NAMESPACES)
+                                    pagebreak = Element('{%(w)s}br' % NAMESPACES)
+                                    pagebreak.attrib['{%(w)s}type' % NAMESPACES] = 'page'
+                                    r.append(pagebreak)
+                    self.merge(parts, **repl) 
+
+
+    def merge_sections(self, replacements, type):
+    
+        """
+        Duplicate template. Creates a copy of the template, does a merge, and separates the them by sections breaks (type in param).
+        Types param :
+        - 'continuous' - Begins the section on the next paragraph.
+        - 'evenPage' - The section begins on the next even-numbered page, leaving the next odd page blank if necessary.
+        - 'nextColumn' - The section begins on the following column on the page.
+        - 'nextPage' - The section begins on the following page.
+        - 'oddPage' - The section begins on the next odd-numbered page, leaving the next even page blank if necessary.
+        """
+        
+        for part in self.parts.values():       
+            root = part.getroot()
             tag = root.tag
             if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
                 continue
+                                 
+            #FINDING FIRST SECTION OF THE DOCUMENT
+            firstSection = root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
+            if firstSection == None:
+                firstSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)
+            
+            #MODIFY TYPE ATTRIBUTE OF FIRST SECTION FOR MERGING
+            nextPageSec = deepcopy(firstSection)
+            for child in nextPageSec:
+            #Delete old type if exist
+                if child.tag == '{%(w)s}type' % NAMESPACES:
+                    nextPageSec.remove(child)
+            #Create new type "nextPage" - to do : replace with parameter option
+            newType = ET.SubElement(nextPageSec, '{%(w)s}type'  % NAMESPACES)
+            newType.set('{%(w)s}val'  % NAMESPACES, type)
+            
+            #REPLACING FIRST SECTION
+            secRoot = firstSection.getparent()
+            secRoot.replace(firstSection, nextPageSec)
+            
+            #FINDING LAST SECTION OF THE DOCUMENT
+            lastSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)
+            
+            #SAVING LAST SECTION
+            mainSection = deepcopy(lastSection)
+            lsecRoot = lastSection.getparent()
+            lsecRoot.remove(lastSection)
+            
+            #COPY CHILD ELEMENTS OF BODY IN A LIST
+            childrenList = root.findall('w:body/*', namespaces=NAMESPACES)       
 
-            children = []
+            #DELETE ALL SUBELEMENTS OF BODY
             for child in root:
-                root.remove(child)
-                children.append(child)
-
+                if child.tag == '{%(w)s}body' % NAMESPACES:
+                    child.clear()
+    
+            #REFILL BODY AND MERGE DOCS - ADD LAST SECTION ENCAPSULATED OR NOT
+            lr = len(replacements)
+            lc = len(childrenList)
+            parts = []
             for i, repl in enumerate(replacements):
-                # Add page break in between replacements
-                if i > 0:
-                    pagebreak = Element('{%(w)s}br' % NAMESPACES)
-                    pagebreak.attrib['{%(w)s}type' % NAMESPACES] = 'page'
-                    root.append(pagebreak)
+                for (j, n) in enumerate(childrenList):
+                    element = deepcopy(n)
+                    for child in root:
+                        if child.tag == '{%(w)s}body' % NAMESPACES:
+                            child.append(element)
+                            parts.append(element)
+                            if (j + 1) == lc:
+                                if (i + 1) == lr:
+                                    child.append(mainSection)
+                                    parts.append(mainSection)
 
-                parts = []
-                for child in children:
-                    child_copy = deepcopy(child)
-                    root.append(child_copy)
-                    parts.append(child_copy)
-                self.merge(parts, **repl)
-
+                                else:
+                                    intSection = deepcopy(mainSection)
+                                    p   = ET.SubElement(child, '{%(w)s}p'  % NAMESPACES)
+                                    pPr = ET.SubElement(p, '{%(w)s}pPr'  % NAMESPACES)
+                                    pPr.append(intSection)
+                                    parts.append(p)
+                    self.merge(parts, **repl) 
+              
     def merge(self, parts=None, **replacements):
         if not parts:
             parts = self.parts.values()
