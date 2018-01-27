@@ -3,7 +3,6 @@ import re
 from lxml.etree import Element
 from lxml import etree
 from zipfile import ZipFile, ZIP_DEFLATED
-import xml.etree.ElementTree as ET
 
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -182,8 +181,8 @@ class MailMerge(object):
                                     parts.append(mainSection)
                                 else:
                                     #Page break
-                                    pb   = ET.SubElement(child, '{%(w)s}p'  % NAMESPACES)
-                                    r = ET.SubElement(pb, '{%(w)s}r'  % NAMESPACES)
+                                    pb   = etree.SubElement(child, '{%(w)s}p'  % NAMESPACES)
+                                    r = etree.SubElement(pb, '{%(w)s}r'  % NAMESPACES)
                                     pagebreak = Element('{%(w)s}br' % NAMESPACES)
                                     pagebreak.attrib['{%(w)s}type' % NAMESPACES] = 'page'
                                     r.append(pagebreak)
@@ -261,8 +260,8 @@ class MailMerge(object):
 
                                 else:
                                     intSection = deepcopy(mainSection)
-                                    p   = ET.SubElement(child, '{%(w)s}p'  % NAMESPACES)
-                                    pPr = ET.SubElement(p, '{%(w)s}pPr'  % NAMESPACES)
+                                    pb   = etree.SubElement(child, '{%(w)s}p'  % NAMESPACES)
+                                    r = etree.SubElement(pb, '{%(w)s}r'  % NAMESPACES)
                                     pPr.append(intSection)
                                     parts.append(p)
                     self.merge(parts, **repl) 
