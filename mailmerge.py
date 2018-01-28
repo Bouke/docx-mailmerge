@@ -1,5 +1,6 @@
 from copy import deepcopy
 import re
+import warnings
 from lxml.etree import Element
 from lxml import etree
 from zipfile import ZipFile, ZIP_DEFLATED
@@ -136,26 +137,26 @@ class MailMerge(object):
                 fields.add(mf.attrib['name'])
         return fields
 
-    def merge_templates(self, replacements, separator, type):
+    def merge_templates(self, replacements, separator):
         """
-        Duplicate template. Creates a copy of the template, does a merge, and separates the them by a break or a new section break (separator argument : 'break' or 'section').
-        the 'type' argument determines witch type of break or new section is inserted :
-
-        For Break, types can be :
-        - 'page' : Page Break. When the item is serialized out as xml, its value is "page".
-        - 'column' : Column Break. When the item is serialized out as xml, its value is "column". ONLY HAVE EFFECT IF DOCUMENT HAVE COLUMNS
-        - 'textWrapping' : Line Break. When the item is serialized out as xml, its value is "textWrapping".
-
-        For New section, types can be :
-        - 'continuous' : Begins the section on the next paragraph.
-        - 'evenPage' : The section begins on the next even-numbered page, leaving the next odd page blank if necessary.
-        - 'nextColumn' : The section begins on the following column on the page. ONLY HAVE EFFECT IF DOCUMENT HAVE COLUMNS
-        - 'nextPage' : The section begins on the following page.
-        - 'oddPage' : The section begins on the next odd-numbered page, leaving the next even page blank if necessary.
+        Duplicate template. Creates a copy of the template, does a merge, and separates them by a new paragraph, a new break or a new section break.
+        separator must be :
+        - page_break : Page Break. 
+        - column_break : Column Break. ONLY HAVE EFFECT IF DOCUMENT HAVE COLUMNS
+        - textWrapping_break : Line Break.
+        - continuous_section : Continuous section break. Begins the section on the next paragraph.
+        - evenPage_section : evenPage section break. section begins on the next even-numbered page, leaving the next odd page blank if necessary.
+        - nextColumn_section : nextColumn section break. section begins on the following column on the page. ONLY HAVE EFFECT IF DOCUMENT HAVE COLUMNS
+        - nextPage_section : nextPage section break. section begins on the following page.
+        - oddPage_section : oddPage section break. section begins on the next odd-numbered page, leaving the next even page blank if necessary.
         """
 
-        #TO DO : TYPE PARAM CONTROL
-
+        #TYPE PARAM CONTROL AND SPLIT
+        valid_separators = {'page_break', 'column_break', 'textWrapping_break', 'continuous_section', 'evenPage_section', 'nextColumn_section', 'nextPage_section', 'oddPage_section'}
+        if not separator in valid_separators:
+            raise ValueError("Invalid separator argument")
+        type, sepClass = separator.split("_")
+  
 
         #GET ROOT - WORK WITH DOCUMENT
         for part in self.parts.values():
@@ -164,7 +165,7 @@ class MailMerge(object):
             if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
                 continue
 		
-            if separator == 'section':
+            if sepClass == 'section':
 
                 #FINDING FIRST SECTION OF THE DOCUMENT
                 firstSection = root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
@@ -177,7 +178,7 @@ class MailMerge(object):
                 #Delete old type if exist
                     if child.tag == '{%(w)s}type' % NAMESPACES:
                         nextPageSec.remove(child)
-                #Create new type "nextPage" - to do : replace with parameter option
+                #Create new type (def parameter)
                 newType = etree.SubElement(nextPageSec, '{%(w)s}type'  % NAMESPACES)
                 newType.set('{%(w)s}val'  % NAMESPACES, type)
 
@@ -193,10 +194,10 @@ class MailMerge(object):
             lsecRoot = lastSection.getparent()
             lsecRoot.remove(lastSection)
 
-            #COPY CHILD ELEMENTS OF BODY IN A LIST
+            #COPY CHILDREN ELEMENTS OF BODY IN A LIST
             childrenList = root.findall('w:body/*', namespaces=NAMESPACES)
 
-            #DELETE ALL SUBELEMENTS OF BODY
+            #DELETE ALL CHILDREN OF BODY
             for child in root:
                 if child.tag == '{%(w)s}body' % NAMESPACES:
                     child.clear()
@@ -216,16 +217,14 @@ class MailMerge(object):
                                 if (i + 1) == lr:
                                     child.append(mainSection)
                                     parts.append(mainSection)
-
                                 else:
-
-                                    if separator == 'section':
+                                    if sepClass == 'section':
                                         intSection = deepcopy(mainSection)
                                         p   = etree.SubElement(child, '{%(w)s}p'  % NAMESPACES)
                                         pPr = etree.SubElement(p, '{%(w)s}pPr'  % NAMESPACES)
                                         pPr.append(intSection)
                                         parts.append(p)
-                                    elif separator == 'break':
+                                    elif sepClass == 'break':
                                         pb   = etree.SubElement(child, '{%(w)s}p'  % NAMESPACES)
                                         r = etree.SubElement(pb, '{%(w)s}r'  % NAMESPACES)
                                         nbreak = Element('{%(w)s}br' % NAMESPACES)
@@ -238,8 +237,10 @@ class MailMerge(object):
          """
          Deprecated method.
          """
-         print('Please note that this method is deprecated. Use merge_templates method instead')         
-         self.merge_templates(replacements, "break", "page")
+         warnings.warn("merge_pages has been deprecated in favour of merge_templates",
+                      category=DeprecationWarning,
+                      stacklevel=2)         
+         self.merge_templates(replacements, "page_break")
 
     def merge(self, parts=None, **replacements):
         if not parts:
