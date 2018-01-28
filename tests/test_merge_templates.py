@@ -17,7 +17,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH Break page"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'break', 'page')
+				], 'page_break')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -34,7 +34,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH Break column"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'break', 'column')
+				], 'column_break')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -51,7 +51,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH Break textWrapping"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'break', 'textWrapping')
+				], 'textWrapping_break')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -68,7 +68,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH SECTION NEXTPAGE"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'section', 'nextPage')
+				], 'nextPage_section')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -85,7 +85,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH SECTION continuous"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'section', 'continuous')
+				], 'continuous_section')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -102,7 +102,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH SECTION evenPage"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'section', 'evenPage')
+				], 'evenPage_section')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -119,7 +119,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH SECTION oddPage"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'section', 'oddPage')
+				], 'oddPage_section')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -136,7 +136,7 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
 					{'fieldname': "TEST WITH SECTION nextColumn"},
 					{'fieldname': "abc"},
 					{'fieldname': "2b v ~2b"},
-				], 'section', 'nextColumn')
+				], 'nextColumn_section')
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
