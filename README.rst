@@ -71,13 +71,18 @@ single call to `merge`.
 
 Starting in version 0.2.0 there's also the feature for template merging.
 This creates a copy of the template for each item in the list, does a merge,
-and separates them by page breaks.
+and separates them by page or section breaks (see function documentation).
+
+When using this feature, make sure you don't use comments, footnotes, 
+bookmarks, etc. This is because these elements have an id attribute, which
+must be unique. This library does not handle this, resulting in invalid
+documents.
 ::
 
-    document.merge_pages([
+    document.merge_templates([
         {'field1': "Foo", 'field2: "Copy #1"},
         {'field1': "Bar", 'field2: "Copy #2"},
-    ])
+    ], separator='page_break')
 
 
 Write document to file. This should be a new file, as ``ZipFile`` cannot modify
