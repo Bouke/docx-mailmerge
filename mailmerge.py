@@ -15,6 +15,8 @@ CONTENT_TYPES_PARTS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml'
 )
 
 CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'
@@ -141,7 +143,7 @@ class MailMerge(object):
         """
         Duplicate template. Creates a copy of the template, does a merge, and separates them by a new paragraph, a new break or a new section break.
         separator must be :
-        - page_break : Page Break. 
+        - page_break : Page Break.
         - column_break : Column Break. ONLY HAVE EFFECT IF DOCUMENT HAVE COLUMNS
         - textWrapping_break : Line Break.
         - continuous_section : Continuous section break. Begins the section on the next paragraph.
@@ -156,7 +158,7 @@ class MailMerge(object):
         if not separator in valid_separators:
             raise ValueError("Invalid separator argument")
         type, sepClass = separator.split("_")
-  
+
 
         #GET ROOT - WORK WITH DOCUMENT
         for part in self.parts.values():
@@ -164,14 +166,14 @@ class MailMerge(object):
             tag = root.tag
             if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
                 continue
-		
+
             if sepClass == 'section':
 
                 #FINDING FIRST SECTION OF THE DOCUMENT
                 firstSection = root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
                 if firstSection == None:
                     firstSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)
-			
+
                 #MODIFY TYPE ATTRIBUTE OF FIRST SECTION FOR MERGING
                 nextPageSec = deepcopy(firstSection)
                 for child in nextPageSec:
@@ -239,7 +241,7 @@ class MailMerge(object):
          """
          warnings.warn("merge_pages has been deprecated in favour of merge_templates",
                       category=DeprecationWarning,
-                      stacklevel=2)         
+                      stacklevel=2)
          self.merge_templates(replacements, "page_break")
 
     def merge(self, parts=None, **replacements):
