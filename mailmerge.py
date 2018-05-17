@@ -9,6 +9,9 @@ NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
     'ct': 'http://schemas.openxmlformats.org/package/2006/content-types',
+    'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+    'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
+    'pic': 'http://schemas.openxmlformats.org/drawingml/2006/picture',
 }
 
 CONTENT_TYPES_PARTS = (
@@ -26,6 +29,12 @@ class MailMerge(object):
         self.parts = {}
         self.settings = None
         self._settings_info = None
+        
+	self.media = {}  # new images to add indexed by embed id
+        self.rels = None  # etree for relations
+        self._rels_info = None # zi info block for rels
+        self.RELS_NAMESPACES = {'ns': None, 'od': None}
+        
         self.remove_empty_tables = remove_empty_tables
 
         try:
@@ -37,6 +46,14 @@ class MailMerge(object):
                 elif type == CONTENT_TYPE_SETTINGS:
                     self._settings_info, self.settings = self.__get_tree_of_file(file)
 
+            # get the rels for image mappings
+            try:
+                self._rels_info, self.rels = self.__get_tree_of_file('word/_rels/document.xml.rels')
+                self.RELS_NAMESPACES['ns'] = self.rels.getroot().nsmap.get(None)
+                self.RELS_NAMESPACES['od'] = self.rels.getroot().nsmap.get(None).replace('package', 'officeDocument')
+            except:
+                pass
+	    
             to_delete = []
 
             r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
@@ -108,7 +125,10 @@ class MailMerge(object):
             raise
 
     def __get_tree_of_file(self, file):
-        fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
+	if isinstance(file, basestring):
+            fn = file
+        else:
+            fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
         zi = self.zip.getinfo(fn)
         return zi, etree.parse(self.zip.open(zi))
 
@@ -125,8 +145,14 @@ class MailMerge(object):
                 elif zi == self._settings_info:
                     xml = etree.tostring(self.settings.getroot())
                     output.writestr(zi.filename, xml)
+		elif zi == self._rels_info:
+                    xml = etree.tostring(self.rels.getroot())
+                    output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
+            # add new images to media folder is we have images merged
+            for img_id, img_data in self.media.items():
+                output.writestr('media/{}.png'.format(img_id), img_data)
 
     def get_merge_fields(self, parts=None):
         if not parts:
@@ -254,6 +280,31 @@ class MailMerge(object):
                     self.__merge_field(part, field, replacement)
 
     def __merge_field(self, part, field, text):
+        if field.startswith('IMAGE:'):
+            _, img_name = field.split(':')
+            inline_img_el = part.find('.//wp:docPr[@title="{}"]/..'.format(img_name), namespaces=NAMESPACES)
+            if inline_img_el:
+                embed_node = inline_img_el.find('.//a:blip', namespaces=NAMESPACES)
+                if embed_node:
+                    # generate a random id and add tp media list for later export to media folder in zip file
+                    img_id = 'MMR{}'.format(randint(10000000, 999999999))
+                    self.media[img_id] = text
+
+                    # add a relationship
+                    last_img_relationship = self.rels.findall('{%(ns)s}Relationship[@Type="%(od)s/image"]' % self.RELS_NAMESPACES)[-1]
+                    new_img_relationship = deepcopy(last_img_relationship)
+                    new_img_relationship.set('Id', img_id)
+                    new_img_relationship.set('Target', '/media/{}.png'.format(img_id))
+                    self.rels.getroot().append(new_img_relationship)
+
+                    # replace the embed attrib with the new image_id
+                    embed_node = inline_img_el.find('.//a:blip', namespaces=NAMESPACES)
+                    embed_attr = embed_node.attrib.keys()[0]
+                    embed_node.attrib[embed_attr] = img_id
+                # mark as done
+                inline_img_el.find('wp:docPr', namespaces=NAMESPACES).attrib['title'] = 'replaced_image_{}'.format(img_id)
+            return
+        
         for mf in part.findall('.//MergeField[@name="%s"]' % field):
             children = list(mf)
             mf.clear()  # clear away the attributes
