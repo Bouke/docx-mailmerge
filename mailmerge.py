@@ -30,7 +30,7 @@ class MailMerge(object):
         self.settings = None
         self._settings_info = None
         
-	self.media = {}  # new images to add indexed by embed id
+        self.media = {}  # new images to add indexed by embed id
         self.rels = None  # etree for relations
         self._rels_info = None # zi info block for rels
         self.RELS_NAMESPACES = {'ns': None, 'od': None}
@@ -53,7 +53,6 @@ class MailMerge(object):
                 self.RELS_NAMESPACES['od'] = self.rels.getroot().nsmap.get(None).replace('package', 'officeDocument')
             except:
                 pass
-	    
             to_delete = []
 
             r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
@@ -125,7 +124,7 @@ class MailMerge(object):
             raise
 
     def __get_tree_of_file(self, file):
-	if isinstance(file, basestring):
+        if isinstance(file, basestring):
             fn = file
         else:
             fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
@@ -145,7 +144,7 @@ class MailMerge(object):
                 elif zi == self._settings_info:
                     xml = etree.tostring(self.settings.getroot())
                     output.writestr(zi.filename, xml)
-		elif zi == self._rels_info:
+                elif zi == self._rels_info:
                     xml = etree.tostring(self.rels.getroot())
                     output.writestr(zi.filename, xml)
                 else:
@@ -190,14 +189,14 @@ class MailMerge(object):
             tag = root.tag
             if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
                 continue
-		
+
             if sepClass == 'section':
 
                 #FINDING FIRST SECTION OF THE DOCUMENT
                 firstSection = root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
                 if firstSection == None:
                     firstSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)
-			
+
                 #MODIFY TYPE ATTRIBUTE OF FIRST SECTION FOR MERGING
                 nextPageSec = deepcopy(firstSection)
                 for child in nextPageSec:
