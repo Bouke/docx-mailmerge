@@ -30,8 +30,8 @@ class MailMerge(object):
         self.settings = None
         self._settings_info = None
 
-        self.media = {}  # new images to add indexed by embed id
-        self.rels = None  # etree for relations
+        self.media = {}         # new images to add indexed by embed id
+        self.rels = None        # etree for relationships
         self._rels_info = None  # zi info block for rels
         self.RELS_NAMESPACES = {'ns': None, 'od': None}
 
