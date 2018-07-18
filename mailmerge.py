@@ -260,7 +260,7 @@ class MailMerge(object):
     def eval_strftime(cls, dt, fmt):
         def repl(m):
             res = ''
-            pattern = m[0]
+            pattern = m.group(0)
             while pattern:
                 # Years
                 if pattern[:4] in ['yyyy', 'YYYY']:
