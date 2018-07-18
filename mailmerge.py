@@ -333,8 +333,6 @@ class MailMerge(object):
     def eval(cls, data, code):
         params = shlex.split(code, posix=False)
         params = params[2:]
-        print('Eval', type(data), data, 'Params', params)
-
         evaluated = False
         for i, param in enumerate(params):
             if param == '\\@':
