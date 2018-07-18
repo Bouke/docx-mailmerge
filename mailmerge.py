@@ -1,5 +1,6 @@
 import re
 import shlex
+from datetime import date, time, datetime
 from copy import deepcopy
 import re
 import warnings
@@ -310,15 +311,43 @@ class MailMerge(object):
             return str(dt)
 
     @classmethod
-    def eval(cls, data, code):
-        if data is None:
+    def eval_star(cls, data):
+        # This is similiar to what Word is doing. It uses
+        # default formats based on locale. This should be
+        # consistent behaviour.
+        if isinstance(data, (datetime, )):
+            # i.e. 08/16/1988 13:42
+            return data.strftime('%x %X')
+        elif isinstance(data, (date, )):
+            # i.e. 08/16/1988
+            return data.strftime('%x')
+        elif isinstance(data, (time, )):
+            # i.e. 13:18:00
+            return data.strftime('%X')
+        elif data is None:
             return ''
+        else:
+            return str(data)
+
+    @classmethod
+    def eval(cls, data, code):
         params = shlex.split(code, posix=False)
         params = params[2:]
         print('Eval', type(data), data, 'Params', params)
+
+        evaluated = False
         for i, param in enumerate(params):
             if param == '\\@':
                 data = cls.eval_strftime(data, params[i + 1])
+                evaluated = True
+            elif param == '\\*':
+                data = cls.eval_star(data)
+                evaluated = True
+
+        # According to Word lack of "\* MERGEFORMAT" in MERGEFIELD is perfectly fine
+        # so we treat lack of evaluation as \* code.
+        if not evaluated:
+            data = cls.eval_star(data)
         return data
 
     def __merge_field(self, part, field, text):

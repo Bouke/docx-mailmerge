@@ -27,3 +27,13 @@ class TestEval(TestCase):
         self.assertEqual(MailMerge.eval_strftime(self.today, 'd'), '1')
         self.assertEqual(MailMerge.eval_strftime(self.today, 'dd'), '01')
         self.assertEqual(MailMerge.eval_strftime(self.today, 'dddd'), self.today.strftime('%A'))
+
+    def test_eval(self):
+        self.assertEqual(MailMerge.eval_star(self.today), self.today.strftime('%x %X'))
+        self.assertEqual(MailMerge.eval_star(self.today.date()), self.today.strftime('%x'))
+        self.assertEqual(MailMerge.eval_star(self.today.time()), self.today.strftime('%X'))
+
+    def test_parse_code(self):
+        self.assertEqual(MailMerge.eval(self.today, 'MAILMERGE Foo \\* MERGEFORMAT'), self.today.strftime('%x %X'))
+        self.assertEqual(MailMerge.eval(self.today, 'MAILMERGE Foo'), self.today.strftime('%x %X'))
+        self.assertEqual(MailMerge.eval(self.today, 'MAILMERGE Foo \\@ "y-MM-dd" MERGEFORMAT'), '2018-07-01')
