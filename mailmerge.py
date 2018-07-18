@@ -118,7 +118,7 @@ class MailMerge(object):
     def write(self, file):
         # Replace all remaining merge fields with empty values
         for field in self.get_merge_fields():
-            self.merge(**{field: ''})
+            self.merge(**{field: None})
 
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
