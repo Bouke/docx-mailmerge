@@ -258,6 +258,11 @@ class MailMerge(object):
 
     @classmethod
     def eval_strftime(cls, dt, fmt):
+        if dt is None:
+            return ''
+        elif not isinstance(dt, (datetime, date, time, )):
+            return str(dt)
+
         def repl(m):
             res = ''
             pattern = m.group(0)
