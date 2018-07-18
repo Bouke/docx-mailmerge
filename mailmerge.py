@@ -1,9 +1,11 @@
-from copy import deepcopy
 import re
+from copy import deepcopy
 import warnings
 from lxml.etree import Element
 from lxml import etree
 from zipfile import ZipFile, ZIP_DEFLATED
+import shlex
+
 
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -39,7 +41,6 @@ class MailMerge(object):
 
             to_delete = []
 
-            r = re.compile(r' MERGEFIELD +"?([^ ]+?)"? +(|\\\* MERGEFORMAT )', re.I)
             for part in self.parts.values():
 
                 for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
@@ -48,10 +49,10 @@ class MailMerge(object):
                             continue
                         instr = child.attrib['{%(w)s}instr' % NAMESPACES]
 
-                        m = r.match(instr)
-                        if m is None:
+                        name = self.__parse_instr(instr)
+                        if name is None:
                             continue
-                        parent[idx] = Element('MergeField', name=m.group(1))
+                        parent[idx] = Element('MergeField', name=name, data=instr)
 
                 for parent in part.findall('.//{%(w)s}instrText/../..' % NAMESPACES):
                     children = list(parent)
@@ -80,10 +81,11 @@ class MailMerge(object):
                         for instr in instr_elements[1:]:
                             instr.getparent().remove(instr)
 
-                        m = r.match(instr_text)
-                        if m is None:
+                        name = self.__parse_instr(instr_text)
+                        if name is None:
                             continue
-                        parent[idx_begin] = Element('MergeField', name=m.group(1))
+
+                        parent[idx_begin] = Element('MergeField', name=name, data=instr_text)
 
                         # use this so we know *where* to put the replacement
                         instr_elements[0].tag = 'MergeText'
@@ -106,6 +108,17 @@ class MailMerge(object):
         except:
             self.zip.close()
             raise
+
+    @classmethod
+    def __parse_instr(cls, instr):
+        args = shlex.split(instr, posix=False)
+        print(args)
+        if args[0] != 'MERGEFIELD':
+            return None
+        name = args[1]
+        if name[0] == '"' and name[-1] == '"':
+            name = name[1:-1]
+        return name
 
     def __get_tree_of_file(self, file):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
@@ -253,16 +266,84 @@ class MailMerge(object):
                 for part in parts:
                     self.__merge_field(part, field, replacement)
 
+    @classmethod
+    def eval_strftime(cls, dt, fmt):
+        def repl(m):
+            res = ''
+            pattern = m[0]
+            while pattern:
+                # Years
+                if pattern[:4] in ['yyyy', 'YYYY']:
+                    res += '%Y'
+                    pattern = pattern[4:]
+                elif pattern[:2] in ['yy', 'YY']:
+                    res += '%y'
+                    pattern = pattern[2:]
+                elif pattern[:1] in ['y', 'Y']:
+                    res += '%Y'
+                    pattern = pattern[1:]
+
+                # Months
+
+                elif pattern[:4] == 'MMMM':
+                    res += '%B'
+                    pattern = pattern[4:]
+                elif pattern[:2] == 'MM':
+                    res += '%m'
+                    pattern = pattern[2:]
+                elif pattern[:1] == 'M':
+                    # Hack for non-zero padded month
+                    res += str(dt.month)
+                    pattern = pattern[1:]
+
+                # Days
+                elif pattern[:4] == 'dddd':
+                    res += '%A'
+                    pattern = pattern[4:]
+                elif pattern[:2] == 'dd':
+                    res += '%d'
+                    pattern = pattern[2:]
+                elif pattern[:1] == 'd':
+                    # Hack for non-zero padded month
+                    res += str(dt.day)
+                    pattern = pattern[1:]
+                else:
+                    break
+            return res
+
+        if fmt[0] == '"' and fmt[-1] == '"':
+            fmt = fmt[1:-1]
+
+        fmt = re.sub(r'[dmMyY]+', repl, fmt)
+        try:
+            return dt.strftime(fmt)
+        except AttributeError:
+            return str(dt)
+
+    @classmethod
+    def eval(cls, data, code):
+        if data is None:
+            return ''
+        params = shlex.split(code, posix=False)
+        params = params[2:]
+        print('Eval', type(data), data, 'Params', params)
+        for i, param in enumerate(params):
+            if param == '\\@':
+                data = cls.eval_strftime(data, params[i + 1])
+        return data
+
     def __merge_field(self, part, field, text):
         for mf in part.findall('.//MergeField[@name="%s"]' % field):
             children = list(mf)
+            # Original code is saved in "data" attribute
+            instr = mf.attrib['data']
             mf.clear()  # clear away the attributes
             mf.tag = '{%(w)s}r' % NAMESPACES
             mf.extend(children)
 
             nodes = []
             # preserve new lines in replacement text
-            text = text or ''  # text might be None
+            text = self.eval(text, instr)
             text_parts = text.replace('\r', '').split('\n')
             for i, text_part in enumerate(text_parts):
                 text_node = Element('{%(w)s}t' % NAMESPACES)
