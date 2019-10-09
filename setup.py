@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='docx-mailmerge',
-      version='0.4.0',
+      version='0.5.0',
       description='Performs a Mail Merge on docx (Microsoft Office Word) files',
       long_description=open('README.rst').read(),
       classifiers=[
