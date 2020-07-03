@@ -216,8 +216,9 @@ class MailMerge(object):
             #REFILL BODY AND MERGE DOCS - ADD LAST SECTION ENCAPSULATED OR NOT
             lr = len(replacements)
             lc = len(childrenList)
-            parts = []
+
             for i, repl in enumerate(replacements):
+                parts = []
                 for (j, n) in enumerate(childrenList):
                     element = deepcopy(n)
                     for child in root:
