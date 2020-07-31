@@ -296,30 +296,37 @@ class MailMerge(object):
                 mf.extend(nodes)
 
     def merge_rows(self, anchor, rows):
-        table, idx, template = self.__find_row_anchor(anchor)
-        if table is not None:
-            if len(rows) > 0:
-                del table[idx]
-                for i, row_data in enumerate(rows):
-                    row = deepcopy(template)
-                    self.merge([row], **row_data)
-                    table.insert(idx + i, row)
-            else:
-                # if there is no data for a given table
-                # we check whether table needs to be removed
-                if self.remove_empty_tables:
-                    parent = table.getparent()
-                    parent.remove(table)
+        list = self.__find_row_anchor(anchor)
+        for eachTable in list:
+            table,idx,template = eachTable    
+            if table is not None:
+                if len(rows) > 0:
+                    del table[idx]
+                    for i, row_data in enumerate(rows):
+                        row = deepcopy(template)
+                        self.merge([row], **row_data)
+                        table.insert(idx + i, row)
+                else:
+                    # if there is no data for a given table
+                    # we check whether table needs to be removed
+                    if self.remove_empty_tables:
+                        parent = table.getparent()
+                        parent.remove(table)
 
     def __find_row_anchor(self, field, parts=None):
         if not parts:
             parts = self.parts.values()
         for part in parts:
+            list = []
             for table in part.findall('.//{%(w)s}tbl' % NAMESPACES):
                 for idx, row in enumerate(table):
-                    if row.find('.//MergeField[@name="%s"]' % field) is not None:
-                        return table, idx, row
-        return None, None, None
+                    if row.find('.//MergeField[@name="%s"]' % field) is not None and row.find('.//{%(w)s}tbl' % NAMESPACES) is None:
+                        list.append((table,idx,row))
+            if(len(list)>0):
+                print(len(list))
+                return list
+#        return None, None, None
+        return []
 
     def __enter__(self):
         return self
