@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 from os import path
-from lxml import etree
+from xml.etree import ElementTree as ET
 
 from mailmerge import MailMerge, NAMESPACES
 from tests.utils import EtreeMixin
@@ -23,7 +23,7 @@ class Windword2010Test(EtreeMixin, unittest.TestCase):
             with tempfile.NamedTemporaryFile() as outfile:
                 document.write(outfile)
 
-        expected_tree = etree.fromstring(
+        expected_tree = ET.fromstring(
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w14 wp14">'  # noqa
               '<w:body>'
                 '<w:p w:rsidR="00886208" w:rsidRDefault="00886208">'
