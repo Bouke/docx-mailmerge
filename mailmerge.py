@@ -14,6 +14,7 @@ NAMESPACES = {
 
 CONTENT_TYPES_PARTS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
+    'application/vnd.ms-word.document.macroEnabled.main+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
 )
