@@ -273,8 +273,8 @@ class MailMerge(object):
             mf.extend(children)
 
             nodes = []
+            text = '' if text is None else str(text)
             # preserve new lines in replacement text
-            text = text or ''  # text might be None
             text_parts = str(text).replace('\r', '').split('\n')
             for i, text_part in enumerate(text_parts):
                 text_node = Element('{%(w)s}t' % NAMESPACES)
