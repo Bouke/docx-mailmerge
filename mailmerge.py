@@ -128,13 +128,17 @@ class MailMerge(object):
         for field in self.get_merge_fields():
             self.merge(**{field: ''})
 
+        recover_parser = etree.XMLParser(recover=True)
+
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
                 if zi in self.parts:
-                    xml = etree.tostring(self.parts[zi].getroot())
+                    xml = etree.fromstring(self.parts[zi].getroot(), parser=recover_parser)
+                    xml = etree.tostring(xml)
                     output.writestr(zi.filename, xml)
                 elif zi == self._settings_info:
-                    xml = etree.tostring(self.settings.getroot())
+                    xml = etree.fromstring(self.settings.getroot(), parser=recover_parser)
+                    xml = etree.tostring(xml)
                     output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
