@@ -28,6 +28,7 @@ class MailMerge(object):
         self.settings = None
         self._settings_info = None
         self.remove_empty_tables = remove_empty_tables
+        self.parser = etree.XMLParser(recover=True)
 
         try:
             content_types = etree.parse(self.zip.open('[Content_Types].xml'))
@@ -121,24 +122,20 @@ class MailMerge(object):
     def __get_tree_of_file(self, file):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
         zi = self.zip.getinfo(fn)
-        return zi, etree.parse(self.zip.open(zi))
+        return zi, etree.parse(self.zip.open(zi), parser=self.parser)
 
     def write(self, file):
         # Replace all remaining merge fields with empty values
         for field in self.get_merge_fields():
             self.merge(**{field: ''})
 
-        recover_parser = etree.XMLParser(recover=True)
-
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
                 if zi in self.parts:
-                    xml = etree.fromstring(self.parts[zi].getroot(), parser=recover_parser)
-                    xml = etree.tostring(xml)
+                    xml = etree.tostring(self.parts[zi].getroot())
                     output.writestr(zi.filename, xml)
                 elif zi == self._settings_info:
-                    xml = etree.fromstring(self.settings.getroot(), parser=recover_parser)
-                    xml = etree.tostring(xml)
+                    xml = etree.tostring(self.settings.getroot())
                     output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
