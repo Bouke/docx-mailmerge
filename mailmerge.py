@@ -132,10 +132,10 @@ class MailMerge(object):
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
                 if zi in self.parts:
-                    xml = etree.tostring(self.parts[zi].getroot())
+                    xml = etree.tostring(self.parts[zi].getroot(), encoding='utf-8', xml_declaration=True)
                     output.writestr(zi.filename, xml)
                 elif zi == self._settings_info:
-                    xml = etree.tostring(self.settings.getroot())
+                    xml = etree.tostring(self.settings.getroot(), encoding='utf-8', xml_declaration=True)
                     output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
