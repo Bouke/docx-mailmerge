@@ -1,15 +1,18 @@
-from copy import deepcopy
 import warnings
+import shlex
+import re
+from zipfile import ZipFile, ZIP_DEFLATED
+from copy import deepcopy
+
 from lxml.etree import Element
 from lxml import etree
-from zipfile import ZipFile, ZIP_DEFLATED
-import shlex
 
 
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
     'ct': 'http://schemas.openxmlformats.org/package/2006/content-types',
+    'xml': 'http://www.w3.org/XML/1998/namespace'
 }
 
 CONTENT_TYPES_PARTS = (
@@ -20,96 +23,522 @@ CONTENT_TYPES_PARTS = (
 
 CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'
 
+VALID_SEPARATORS = {
+    'page_break', 'column_break', 'textWrapping_break',
+    'continuous_section', 'evenPage_section', 'nextColumn_section', 'nextPage_section', 'oddPage_section'}
+
+NUMBERFORMAT_RE = r"([^0.,#PN]+)?(P\d+|N\d+|[0.,#]+%?)([^0.,#%].*)?"
+OPERATOR_MAP = {
+    "<>": lambda x,y:x!=y,
+    "=": lambda x,y:x==y,
+    "<=": lambda x,y:x<=y,
+    "<": lambda x,y:x<y,
+    ">=": lambda x,y:x>=y,
+    ">": lambda x,y:x>y
+}
+
+
+class MergeField(object):
+    """
+    Base MergeField class
+
+    it contains the field name, and a method to return a list of elements (runs) given the data dictionary 
+    """
+
+    def __init__(self, parent, name=None, key=None, instr=None, instr_tokens=None, elements=None, ignore_elements=None):
+        """ Inits the MergeField class
+        
+        Args:
+            parent: The parent element of the MergeField in the tree.
+            idx: The idx of the MergeField in the parent.
+            name: The name of the field, if applicable"""
+        self.parent = parent
+        self.key = key # the key of this MergeField to be able to identify it. It is used as the name in the replaced MergeField element
+        # the list of elements to add when merging
+        self._elements_to_add = [] if elements is None else elements
+        # the list of elements to ignore when merging (after and including "separate" fldCharType)
+        self._elements_to_ignore = [] if ignore_elements is None else ignore_elements
+        self.instr = instr
+        self.instr_tokens = instr_tokens
+        self.filled_elements = []
+        self.filled_value = None
+        self.name = name or instr_tokens[1]
+
+        self._parse_instruction()
+
+    def _parse_instruction(self):
+        # # we keep only the first node, and will add the text to this node
+        self._elements_to_ignore.extend(self._elements_to_add[1:])
+        del self._elements_to_add[1:]
+        # pass
+    
+    def get_sub_fields(self):
+        # no sub fields
+        yield from ()
+
+    def _format(self, value):
+        if self.instr_tokens[2:]:
+            flag = self.instr_tokens[2][0:2]
+            option = ''.join([self.instr_tokens[2][2:]] + self.instr_tokens[3:])
+            if flag in ('\\b', '\\f'):
+                return self._format_bf(value, flag, option)
+            if flag in ('\\#'):
+                return self._format_number(value, flag, option)
+            if flag in ('\\@'):
+                return self._format_date(value, flag, option)
+            if flag in ('\\*'):
+                return self._format_text(value, flag, option)
+        return value
+
+    def _format_bf(self, value, flag, option):
+        # print("<{}><{}>".format(value, type(value)))
+        if value:
+            if flag == '\\b':
+                return option + str(value)
+            return str(value) + option
+        # no value no text
+        return None
+
+    def _format_text(self, value, flag, option):
+        option = option.lower()
+        if option == 'caps':
+            return str(value).title()
+        if option == 'firstcap':
+            return str(value).capitalize()
+        if option == 'upper':
+            return str(value).upper()
+        if option == 'lower':
+            return str(value).lower()
+
+        return value
+
+    def _format_number(self, value, flag, option):
+        format_match = re.fullmatch(NUMBERFORMAT_RE, option)
+        if format_match is None:
+            warnings.warn("Non conforming number format <{}>".format(option))
+            return value
+        format_prefix = format_match.group(1) or ""
+        format_number = format_match.group(2)
+        format_suffix = format_match.group(3) or ""
+        if format_number[0] == 'P':
+            return "{{}}{{:.{}%}}{{}}".format(
+                int(format_number[1:])).format(
+                    format_prefix,
+                    value,
+                    format_suffix)
+        if format_number[0] == 'N':
+            return "{{}}{{:.{}}}{{}}".format(
+                int(format_number[1:])).format(
+                    format_prefix,
+                    value,
+                    format_suffix)
+        if format_number[-1] == '%':
+            return "{}{:.0%}{}".format(
+                    format_prefix,
+                    value,
+                    format_suffix)
+        thousand_flag = "," if ',' in format_number else ''
+        format_number = format_number.replace(',', '')
+        digits, decimals = (format_number.split('.') + [''])[0:2]
+        zero_digits = len(digits.replace('#', ''))
+        zero_decimals = len(decimals.replace('#', ''))
+        len_decimals_plus_dot = 0 if not decimals else 1 + len(decimals)
+        number_format_text = "{{}}{{:{thousand_flag}{zero_digits}{decimals}f}}{{}}".format(
+            thousand_flag=thousand_flag,
+            zero_digits="0>{}".format(zero_digits + len_decimals_plus_dot) if zero_digits > 0 else "",
+            decimals=".{}".format(len(decimals)))
+        # print(self.name, "<", option, ">", number_format_text)
+        return number_format_text.format(
+                    format_prefix,
+                    value,
+                    format_suffix)
+
+    def _format_date(self, value, flag, option):
+        warnings.warn("Date formatting not yet implemented <{}>".format(option))
+        return value
+
+    def fill_data(self, merge_data, row):
+        self.filled_elements = []
+        value = row.get(self.name, "UNKNOWN({})".format(self.instr))
+        value = self._format(value)
+        self.filled_value = value
+
+        if value is None:
+            # no elements should be filled
+            return
+        
+        elem = deepcopy(self._elements_to_add[0])
+        for child in elem.xpath('w:instrText', namespaces=NAMESPACES):
+            elem.remove(child)
+        for child in elem.xpath('w:t', namespaces=NAMESPACES):
+            elem.remove(child)
+
+        text_parts = str(value).replace('\r', '').split('\n')
+        elem.append(self._make_text(text_parts[0]))
+        for text_part in text_parts[1:]:
+            elem.append(self._make_br())
+            elem.append(self._make_text(text_part))
+
+        self.filled_elements.append(elem)
+
+    def _make_br(self):
+        return Element('{%(w)s}br' % NAMESPACES)
+    
+    def _make_text(self, text):
+        text_node = Element('{%(w)s}t' % NAMESPACES)
+        text_node.set("{%(xml)s}space" % NAMESPACES, "preserve")
+        text_node.text = text
+        return text_node
+
+        # for i, elem in enumerate(self._elements_to_add):
+        #     if elem.tag == 'MergeField':
+        #         filled_elem = merge_data.fill_field(elem, row)
+        #         self.filled_elements.extend(filled_elem.filled_elements)
+        #         continue
+        #     # if self.name:
+        #     #     text = row.get('name','')
+        #     #     text_parts = str(text).replace('\r', '').split('\n')
+        #     #     for i, text_part in enumerate(text_parts):
+        #     #         text_node = Element('{%(w)s}t' % NAMESPACES)
+        #     #         text_node.text = text_part
+        #     #         nodes.append(text_node)
+
+        #     #         # if not last node add new line node
+        #     #         if i < (len(text_parts) - 1):
+        #     #             nodes.append(Element('{%(w)s}br' % NAMESPACES))
+
+        #     self.filled_elements.append(elem)
+
+    def insert_into_tree(self):
+        """ inserts a MergeField element in the original tree at the right position
+        
+        """
+        # Make sure ALL elements from the original tree are removed except for the first useful, that we will replace
+        for subelem in self._elements_to_ignore:
+            self.parent.remove(subelem)
+        for subelem in self._elements_to_add[1:]:
+            self.parent.remove(subelem)
+
+        replacement_element = Element("MergeField", name=self.key)
+        self.parent.replace(self._elements_to_add[0], replacement_element)
+        return replacement_element
+
+class IfMergeField(MergeField):
+
+    def __init__(self, *args, **kwargs):
+        self._elements_for_cond = []
+        self._elements_for_true = []
+        self._elements_for_false = []
+        super().__init__(*args, **kwargs)
+
+    def _parse_instruction(self):
+
+        self.name = ""
+        # if 4 then empty no
+        assert len(self.instr_tokens) in [5, 6], self.instr_tokens
+
+        # we compute first the start/end of each token
+        tokens_with_start_end = []
+        start = 0
+        for token in self.instr_tokens:
+            if not token:
+                pos = self.instr.index('""', start) + 1
+            else:
+                pos = self.instr.index(token, start)
+            tokens_with_start_end.append((token, pos, pos+len(token)))
+            start = pos + len(token)
+        tokens_with_start_end.append(("", len(self.instr), len(self.instr)))
+        
+        # we filter the elements for each part (condition, true, false)
+        self._elements_for_cond = self._filter_elements(tokens_with_start_end[1][1], tokens_with_start_end[3][2])
+        self._elements_for_true = self._filter_elements(*tokens_with_start_end[4][1:3])
+        self._elements_for_false = self._filter_elements(*tokens_with_start_end[5][1:3])
+
+    def get_sub_fields(self):
+        for elem in self._elements_for_cond + self._elements_for_true + self._elements_for_false:
+            if elem.tag == 'MergeField':
+                yield elem
+
+    def _filter_elements(self, start_pos, end_pos):
+
+        element_list = []
+        pos_of_elem = 0
+        for i, elem in enumerate(self._elements_to_add):
+            if pos_of_elem > end_pos:
+                break
+            if elem.tag == 'MergeField':
+                text = "{{{}}}".format(elem.get('name'))
+            else:
+                text = "".join([t for t in elem.xpath('w:instrText/text()', namespaces=NAMESPACES)])
+
+            end_text_pos = pos_of_elem + len(text)
+            if end_text_pos >= start_pos:
+                # we maybe started the yes
+                start_of_text = 0 if start_pos <= pos_of_elem else start_pos - pos_of_elem
+                end_of_text = len(text) if end_pos >= end_text_pos else end_pos - pos_of_elem
+                len_of_text = end_of_text - start_of_text
+                if len_of_text > 0 or not text:
+                    # we need to include the element
+                    if len_of_text < len(text):
+                        # only part of the element
+                        elem = deepcopy(elem)
+                        text_elem = elem.xpath('w:instrText', namespaces=NAMESPACES)[0]
+                        text_elem.text = text_elem.text[start_of_text:end_of_text]
+
+                    element_list.append(elem)
+            pos_of_elem = end_text_pos
+
+        # for elem in element_list:
+        #     print("<", "".join([t for t in elem.xpath('w:instrText/text()', namespaces=NAMESPACES)]), ">")
+        return element_list
+
+    def fill_data(self, merge_data, row):
+        # first check the condition
+        data_dict = {}
+        # print("if lists", len(self._elements_for_cond), len(self._elements_for_true), len(self._elements_for_false))
+        for i, elem in enumerate(self._elements_for_cond):
+            # print(etree.tostring(elem))
+            if elem.tag == 'MergeField':
+                filled_elem = merge_data.fill_field(elem, row)
+                data_dict["{{{}}}".format(filled_elem.key)] = filled_elem.filled_value
+        
+        expr1 = self.instr_tokens[1] or '""'
+        expr1 = data_dict.get(expr1, expr1)
+        cond_operator = OPERATOR_MAP[self.instr_tokens[2]]
+        expr2 = self.instr_tokens[3] or '""'
+        expr2 = data_dict.get(expr2, expr2)
+        if type(expr1) != type(expr2):
+            expr2 = type(expr1)(expr2)
+
+        # print(data_dict)
+        # print("condition", self.instr_tokens[1:4], "({}({}), {}({}))".format(
+        #     expr1, type(expr1), expr2, type(expr2)), "result", cond_operator(expr1, expr2))
+        if cond_operator(expr1, expr2):
+            # true value
+            self._elements_to_add = self._elements_for_true
+        else:
+            # false value
+            self._elements_to_add = self._elements_for_false
+
+        self.filled_elements = []
+        for i, elem in enumerate(self._elements_to_add):
+            if elem.tag == 'MergeField':
+                filled_elem = merge_data.fill_field(elem, row)
+                self.filled_elements.extend(filled_elem.filled_elements)
+            else:
+                elem = deepcopy(elem)
+                for child in elem.xpath('w:instrText', namespaces=NAMESPACES):
+                    child.tag = '{%(w)s}t' % NAMESPACES
+                self.filled_elements.append(elem)
+
+class MergeData(object):
+
+    """ prepare the MergeField objects and the data """
+    
+    FIELD_CLASSES = {
+        "MERGEFIELD": MergeField,
+        "IF": IfMergeField
+    }
+
+    def __init__(self):
+        self._merge_field_map = {} # merge_field.key: MergeField()
+        self._merge_field_next_id = 0
+
+    def get_merge_fields(self, key):
+        merge_obj = self.get_field_obj(key)
+        if merge_obj.name:
+            yield merge_obj.name
+        else:
+            for merge_field_elem in merge_obj.get_sub_fields():
+                yield from self.get_merge_fields(merge_field_elem.get('name'))
+
+    @classmethod
+    def _get_instr_text(cls, elements):
+        return "".join([
+            text
+            for elem in elements
+            for text in elem.xpath('w:instrText/text()', namespaces=NAMESPACES) + [
+                "{{{}}}".format(obj_name) for obj_name in elem.xpath('@name')]
+        ])
+
+    @classmethod
+    def _get_instr_tokens(cls, instr):
+        s = shlex.shlex(instr, posix=True, punctuation_chars='<>=')
+        s.whitespace_split = True
+        s.commenters = ''
+        s.escape = ''
+        return s
+
+    def make_data_field(self, parent, key=None, instr=None, elements=None, **kwargs):
+        """ MergeField factory method """
+        if key is None:
+            key = self._get_next_key()
+
+        instr = instr or self._get_instr_text(elements)        
+        tokens = list(self._get_instr_tokens(instr))
+        field_class = self.FIELD_CLASSES.get(tokens[0], MergeField)
+        field_obj = field_class(
+            parent,
+            key=key,
+            instr=instr,
+            instr_tokens=tokens,
+            elements=elements,
+            **kwargs
+        )
+
+        assert key not in self._merge_field_map
+        self._merge_field_map[key] = field_obj
+        return field_obj
+
+    def get_field_obj(self, key):
+        return self._merge_field_map[key]
+
+    def _get_next_key(self):
+        key = "field_{}".format(self._merge_field_next_id)
+        self._merge_field_next_id += 1
+        return key
+
+    def replace(self, body, row):
+        """ replaces in the body xml tree the MergeField elements with values from the row """
+        merge_fields = body.findall('.//MergeField')
+        for field_element in merge_fields:
+            filled_field = self.fill_field(field_element, row)
+            for text_element in reversed(filled_field.filled_elements):
+                field_element.addnext(text_element)
+            field_element.getparent().remove(field_element)
+    
+    def fill_field(self, field_element, row):
+        """" fills the corresponding MergeField python object with data from row """
+        field_key = field_element.get('name')
+        field_obj = self._merge_field_map[field_key]
+        field_obj.fill_data(self, row)
+        return field_obj
+
+class MergeDocument(object):
+
+    """ prepare and merge one document 
+    
+        helper class to handle the actual merging of one document
+        It prepares the body, sections, separators
+    """
+
+    def __init__(self, root, separator):
+        self.root = root
+        # self.sep_type = sep_type
+        # self.sep_class = sep_class
+        # if sep_class == 'section':
+        #     self._set_section_type()
+        
+        self._last_section = None # saving the last section to add it at the end
+        self._body = None # the document body, where all the documents are appended
+        self._body_copy = None # a deep copy of the original body without ending section
+        self._prepare_data(separator)
+
+    def _prepare_data(self, separator):
+
+        if separator not in VALID_SEPARATORS:
+            raise ValueError("Invalid separator argument")
+        sep_type, sep_class = separator.split("_")
+
+        # TODO why setting the type only to the first section and not to the last section ?
+
+        if sep_class == 'section':
+            #FINDING FIRST SECTION OF THE DOCUMENT
+            first_section = self.root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
+            if first_section is None:
+                first_section = self.root.find("w:body/w:sectPr", namespaces=NAMESPACES)
+        
+            type_element = first_section.find("w:type", namespaces=NAMESPACES)
+            if not type_element:
+                type_element = etree.SubElement(first_section, '{%(w)s}type' % NAMESPACES)
+            type_element.set('{%(w)s}val' % NAMESPACES, sep_type)
+
+        #FINDING LAST SECTION OF THE DOCUMENT
+        self._last_section = self.root.find("w:body/w:sectPr", namespaces=NAMESPACES)
+    
+        self._body = self._last_section.getparent()
+        self._body.remove(self._last_section)
+
+        self._body_copy = deepcopy(self._body)
+
+        #EMPTY THE BODY
+        self._body.clear()
+
+        self._separator = etree.Element('{%(w)s}p'  % NAMESPACES)
+
+        if sep_class == 'section':
+            pPr = etree.SubElement(self._separator, '{%(w)s}pPr'  % NAMESPACES)
+            pPr.append(deepcopy(self._last_section))
+        elif sep_class == 'break':
+            r = etree.SubElement(self._separator, '{%(w)s}r'  % NAMESPACES)
+            nbreak = etree.SubElement(r, '{%(w)s}br' % NAMESPACES)
+            nbreak.set('{%(w)s}type' % NAMESPACES, sep_type)
+        
+
+    def merge(self, merge_data, row, first=False):
+        # add separator if not the first document
+        if not first:
+            self._body.append(deepcopy(self._separator))
+        
+        body = deepcopy(self._body_copy)
+        merge_data.replace(body, row)
+        for child in body:
+            self._body.append(child)
+
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            self._body.append(self._last_section)
 
 class MailMerge(object):
+
+    """
+    MailMerge class to write an output docx document by merging data rows to a template
+
+    RESTRICTIONS:
+        The field text must NOT contain new paragraphs.
+    The class uses the builtin MergeFields in Word. There are two kind of data fields, simple and complex.
+    http://officeopenxml.com/WPfields.php
+    Also, there are other kind of fields that are of interest, mainly IF fields that define conditional output depending on the 
+    outcome of a condition, the condition and the output can contain other IF and MERGEFIELD fields as well.
+    The MERGEFIELD can have MERGEFORMAT
+
+    MailMerge implements this by finding all Fields and replacing them with placeholder Elements of type
+    MergeElement
+
+    Those MergeElement elements will then be replaced for each run with a list of elements containing run elements with texts.
+    The MergeElement value (list of run Elements) should be computed recursively for the inner MergeElements
+
+    The IF MergeElement has the condition MergeCondition, and two lists of elements, one for true and one for false
+
+    """
+
     def __init__(self, file, remove_empty_tables=False):
         self.zip = ZipFile(file)
-        self.parts = {}
+        self.parts = {} # part: ElementTree
         self.settings = None
         self._settings_info = None
         self.remove_empty_tables = remove_empty_tables
+        self.merge_data = MergeData()
 
         try:
-            content_types = etree.parse(self.zip.open('[Content_Types].xml'))
-            for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
-                type = file.attrib['ContentType' % NAMESPACES]
-                if type in CONTENT_TYPES_PARTS:
-                    zi, self.parts[zi] = self.__get_tree_of_file(file)
-                elif type == CONTENT_TYPE_SETTINGS:
-                    self._settings_info, self.settings = self.__get_tree_of_file(file)
-
-            to_delete = []
+            self.__fill_parts()
 
             for part in self.parts.values():
-
-                for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
-                    for idx, child in enumerate(parent):
-                        if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
-                            continue
-                        instr = child.attrib['{%(w)s}instr' % NAMESPACES]
-
-                        name = self.__parse_instr(instr)
-                        if name is None:
-                            continue
-                        parent[idx] = Element('MergeField', name=name)
-
-                for parent in part.findall('.//{%(w)s}instrText/../..' % NAMESPACES):
-                    children = list(parent)
-                    fields = zip(
-                        [children.index(e) for e in
-                         parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES)],
-                        [children.index(e) for e in
-                         parent.findall('{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="end"]/..' % NAMESPACES)]
-                    )
-
-                    for idx_begin, idx_end in fields:
-                        # consolidate all instrText nodes between'begin' and 'end' into a single node
-                        begin = children[idx_begin]
-                        instr_elements = [e for e in
-                                          begin.getparent().findall('{%(w)s}r/{%(w)s}instrText' % NAMESPACES)
-                                          if idx_begin < children.index(e.getparent()) < idx_end]
-                        if len(instr_elements) == 0:
-                            continue
-
-                        # set the text of the first instrText element to the concatenation
-                        # of all the instrText element texts
-                        instr_text = ''.join([e.text for e in instr_elements])
-                        instr_elements[0].text = instr_text
-
-                        # delete all instrText elements except the first
-                        for instr in instr_elements[1:]:
-                            instr.getparent().remove(instr)
-
-                        name = self.__parse_instr(instr_text)
-                        if name is None:
-                            continue
-
-                        parent[idx_begin] = Element('MergeField', name=name)
-
-                        # use this so we know *where* to put the replacement
-                        instr_elements[0].tag = 'MergeText'
-                        block = instr_elements[0].getparent()
-                        # append the other tags in the w:r block too
-                        parent[idx_begin].extend(list(block))
-
-                        to_delete += [(parent, parent[i + 1])
-                                      for i in range(idx_begin, idx_end)]
-
-            for parent, child in to_delete:
-                parent.remove(child)
+                self.__fill_simple_fields(part)
+                self.__fill_complex_fields(part)
 
             # Remove mail merge settings to avoid error messages when opening document in Winword
-            if self.settings:
-                settings_root = self.settings.getroot()
-                mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
-                if mail_merge is not None:
-                    settings_root.remove(mail_merge)
+            self.__remove_mailmerge_settings()
         except:
             self.zip.close()
             raise
 
     @classmethod
-    def __parse_instr(cls, instr):
+    def parse_instr(cls, instr):
         args = shlex.split(instr, posix=False)
         if args[0] != 'MERGEFIELD':
             return None
@@ -118,15 +547,102 @@ class MailMerge(object):
             name = name[1:-1]
         return name
 
+    def __fill_parts(self):
+        content_types = etree.parse(self.zip.open('[Content_Types].xml'))
+        for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
+            type = file.attrib['ContentType' % NAMESPACES]
+            if type in CONTENT_TYPES_PARTS:
+                zi, self.parts[zi] = self.__get_tree_of_file(file)
+            elif type == CONTENT_TYPE_SETTINGS:
+                self._settings_info, self.settings = self.__get_tree_of_file(file)
+    
+    def __fill_simple_fields(self, part):
+
+        for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
+            for idx, child in enumerate(parent):
+                if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
+                    continue
+                # print(etree.tostring(child))
+                instr = child.attrib['{%(w)s}instr' % NAMESPACES]
+
+                name = self.parse_instr(instr)
+                if name is None:
+                    continue
+                child.tag = '{%(w)s}r' % NAMESPACES
+                child.attrib.clear()
+                merge_field_obj = self.merge_data.make_data_field(
+                    parent, name=name, instr=instr, elements=[child])
+                merge_field_obj.insert_into_tree()
+                # parent[idx] = Element('MergeField', name=merge_field_key)
+
+    def __get_next_element(self, current_element):
+        """ returns the next element of a complex field """
+        next_element = current_element.getnext()
+        if next_element is None:
+            return None, None, None
+        
+        # print(''.join(next_element.xpath('w:instrText/text()', namespaces=NAMESPACES)))
+        field_char_subelem = next_element.find('w:fldChar', namespaces=NAMESPACES)
+        if field_char_subelem is None:
+            return next_element, None, None
+
+        return next_element, field_char_subelem, field_char_subelem.xpath('@w:fldCharType', namespaces=NAMESPACES)[0]
+
+    def _pull_next_merge_field(self, elements_of_type_begin):
+        assert (elements_of_type_begin)
+        current_element = elements_of_type_begin.pop(0)
+        parent_element = current_element.getparent()
+        good_elements = []
+        ignore_elements = [current_element]
+        current_element_list = good_elements
+        field_char_type = None
+
+        # print('<<<<<')
+        while field_char_type != 'end':
+            # find next sibling
+            next_element, field_char_subelem, field_char_type = \
+                self.__get_next_element(current_element)
+            if next_element is None:
+                raise ValueError("begin without end")
+
+            if field_char_type == 'begin':
+                # nested elements
+                assert(elements_of_type_begin[0] is next_element)
+                merge_field_sub_obj = self._pull_next_merge_field(elements_of_type_begin)
+                next_element = merge_field_sub_obj.insert_into_tree()
+            elif field_char_type == 'separate':
+                current_element_list = ignore_elements
+
+            current_element_list.append(next_element)
+            current_element = next_element
+        
+        return self.merge_data.make_data_field(
+            parent_element,
+            elements=good_elements,
+            ignore_elements=ignore_elements)
+
+    def __fill_complex_fields(self, part):
+        """ finds all begin fields and then builds the MergeField objects and inserts the replacement Elements in the tree """
+        elements_of_type_begin = list(part.findall('.//{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES))
+        while elements_of_type_begin:
+            merge_field_obj = self._pull_next_merge_field(elements_of_type_begin)
+            # print(merge_field_obj.instr)
+            merge_field_obj.insert_into_tree()
+
+    def __remove_mailmerge_settings(self):
+
+        if self.settings:
+            settings_root = self.settings.getroot()
+            mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
+            if mail_merge is not None:
+                settings_root.remove(mail_merge)
+
     def __get_tree_of_file(self, file):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
         zi = self.zip.getinfo(fn)
         return zi, etree.parse(self.zip.open(zi))
 
     def write(self, file):
-        # Replace all remaining merge fields with empty values
-        for field in self.get_merge_fields():
-            self.merge(**{field: ''})
 
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
@@ -142,10 +658,12 @@ class MailMerge(object):
     def get_merge_fields(self, parts=None):
         if not parts:
             parts = self.parts.values()
+
         fields = set()
         for part in parts:
             for mf in part.findall('.//MergeField'):
-                fields.add(mf.attrib['name'])
+                for name in self.merge_data.get_merge_fields(mf.attrib['name']):
+                    fields.add(name)
         return fields
 
     def merge_templates(self, replacements, separator):
@@ -161,171 +679,26 @@ class MailMerge(object):
         - nextPage_section : nextPage section break. section begins on the following page.
         - oddPage_section : oddPage section break. section begins on the next odd-numbered page, leaving the next even page blank if necessary.
         """
-
+        assert replacements, "empty data"
         #TYPE PARAM CONTROL AND SPLIT
-        valid_separators = {'page_break', 'column_break', 'textWrapping_break', 'continuous_section', 'evenPage_section', 'nextColumn_section', 'nextPage_section', 'oddPage_section'}
-        if not separator in valid_separators:
-            raise ValueError("Invalid separator argument")
-        type, sepClass = separator.split("_")
-  
-
+        
         #GET ROOT - WORK WITH DOCUMENT
         for part in self.parts.values():
             root = part.getroot()
             tag = root.tag
+
+            # ignore header and footer ?
             if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
                 continue
-		
-            if sepClass == 'section':
 
-                #FINDING FIRST SECTION OF THE DOCUMENT
-                firstSection = root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
-                if firstSection == None:
-                    firstSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)
-			
-                #MODIFY TYPE ATTRIBUTE OF FIRST SECTION FOR MERGING
-                nextPageSec = deepcopy(firstSection)
-                for child in nextPageSec:
-                #Delete old type if exist
-                    if child.tag == '{%(w)s}type' % NAMESPACES:
-                        nextPageSec.remove(child)
-                #Create new type (def parameter)
-                newType = etree.SubElement(nextPageSec, '{%(w)s}type'  % NAMESPACES)
-                newType.set('{%(w)s}val'  % NAMESPACES, type)
-
-                #REPLACING FIRST SECTION
-                secRoot = firstSection.getparent()
-                secRoot.replace(firstSection, nextPageSec)
-
-            #FINDING LAST SECTION OF THE DOCUMENT
-            lastSection = root.find("w:body/w:sectPr", namespaces=NAMESPACES)
-
-            #SAVING LAST SECTION
-            mainSection = deepcopy(lastSection)
-            lsecRoot = lastSection.getparent()
-            lsecRoot.remove(lastSection)
-
-            #COPY CHILDREN ELEMENTS OF BODY IN A LIST
-            childrenList = root.findall('w:body/*', namespaces=NAMESPACES)
-
-            #DELETE ALL CHILDREN OF BODY
-            for child in root:
-                if child.tag == '{%(w)s}body' % NAMESPACES:
-                    child.clear()
-
-            #REFILL BODY AND MERGE DOCS - ADD LAST SECTION ENCAPSULATED OR NOT
-            lr = len(replacements)
-            lc = len(childrenList)
-
-            for i, repl in enumerate(replacements):
-                parts = []
-                for (j, n) in enumerate(childrenList):
-                    element = deepcopy(n)
-                    for child in root:
-                        if child.tag == '{%(w)s}body' % NAMESPACES:
-                            child.append(element)
-                            parts.append(element)
-                            if (j + 1) == lc:
-                                if (i + 1) == lr:
-                                    child.append(mainSection)
-                                    parts.append(mainSection)
-                                else:
-                                    if sepClass == 'section':
-                                        intSection = deepcopy(mainSection)
-                                        p   = etree.SubElement(child, '{%(w)s}p'  % NAMESPACES)
-                                        pPr = etree.SubElement(p, '{%(w)s}pPr'  % NAMESPACES)
-                                        pPr.append(intSection)
-                                        parts.append(p)
-                                    elif sepClass == 'break':
-                                        pb   = etree.SubElement(child, '{%(w)s}p'  % NAMESPACES)
-                                        r = etree.SubElement(pb, '{%(w)s}r'  % NAMESPACES)
-                                        nbreak = Element('{%(w)s}br' % NAMESPACES)
-                                        nbreak.attrib['{%(w)s}type' % NAMESPACES] = type
-                                        r.append(nbreak)
-
-                    self.merge(parts, **repl)
-
-    def merge_pages(self, replacements):
-         """
-         Deprecated method.
-         """
-         warnings.warn("merge_pages has been deprecated in favour of merge_templates",
-                      category=DeprecationWarning,
-                      stacklevel=2)         
-         self.merge_templates(replacements, "page_break")
-
-    def merge(self, parts=None, **replacements):
-        if not parts:
-            parts = self.parts.values()
-
-        for field, replacement in replacements.items():
-            if isinstance(replacement, list):
-                self.merge_rows(field, replacement)
-            else:
-                for part in parts:
-                    self.__merge_field(part, field, replacement)
-
-    def __merge_field(self, part, field, text):
-        for mf in part.findall('.//MergeField[@name="%s"]' % field):
-            children = list(mf)
-            mf.clear()  # clear away the attributes
-            mf.tag = '{%(w)s}r' % NAMESPACES
-            mf.extend(children)
-
-            nodes = []
-            # preserve new lines in replacement text
-            text = text or ''  # text might be None
-            text_parts = str(text).replace('\r', '').split('\n')
-            for i, text_part in enumerate(text_parts):
-                text_node = Element('{%(w)s}t' % NAMESPACES)
-                text_node.text = text_part
-                nodes.append(text_node)
-
-                # if not last node add new line node
-                if i < (len(text_parts) - 1):
-                    nodes.append(Element('{%(w)s}br' % NAMESPACES))
-
-            ph = mf.find('MergeText')
-            if ph is not None:
-                # add text nodes at the exact position where
-                # MergeText was found
-                index = mf.index(ph)
-                for node in reversed(nodes):
-                    mf.insert(index, node)
-                mf.remove(ph)
-            else:
-                mf.extend(nodes)
-
-    def merge_rows(self, anchor, rows):
-        table, idx, template = self.__find_row_anchor(anchor)
-        if table is not None:
-            if len(rows) > 0:
-                del table[idx]
-                for i, row_data in enumerate(rows):
-                    row = deepcopy(template)
-                    self.merge([row], **row_data)
-                    table.insert(idx + i, row)
-            else:
-                # if there is no data for a given table
-                # we check whether table needs to be removed
-                if self.remove_empty_tables:
-                    parent = table.getparent()
-                    parent.remove(table)
-
-    def __find_row_anchor(self, field, parts=None):
-        if not parts:
-            parts = self.parts.values()
-        for part in parts:
-            for table in part.findall('.//{%(w)s}tbl' % NAMESPACES):
-                for idx, row in enumerate(table):
-                    if row.find('.//MergeField[@name="%s"]' % field) is not None:
-                        return table, idx, row
-        return None, None, None
+            with MergeDocument(root, separator) as merge_doc:
+                for i, row in enumerate(replacements):
+                    merge_doc.merge(self.merge_data, row, first=(i==0))
 
     def __enter__(self):
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
     def close(self):
