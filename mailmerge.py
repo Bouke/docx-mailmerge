@@ -45,7 +45,7 @@ class MergeField(object):
     it contains the field name, and a method to return a list of elements (runs) given the data dictionary 
     """
 
-    def __init__(self, parent, name=None, key=None, instr=None, instr_tokens=None, elements=None, ignore_elements=None):
+    def __init__(self, parent, name=None, key=None, instr=None, instr_tokens=None, nested=False, elements=None, ignore_elements=None):
         """ Inits the MergeField class
         
         Args:
@@ -53,6 +53,7 @@ class MergeField(object):
             idx: The idx of the MergeField in the parent.
             name: The name of the field, if applicable"""
         self.parent = parent
+        self.nested = nested
         self.key = key # the key of this MergeField to be able to identify it. It is used as the name in the replaced MergeField element
         # the list of elements to add when merging
         self._elements_to_add = [] if elements is None else elements
@@ -185,7 +186,11 @@ class MergeField(object):
         return Element('{%(w)s}br' % NAMESPACES)
     
     def _make_text(self, text):
-        text_node = Element('{%(w)s}t' % NAMESPACES)
+        if self.nested:
+            text_node = Element('{%(w)s}instrText' % NAMESPACES)
+        else:
+            text_node = Element('{%(w)s}t' % NAMESPACES)
+
         text_node.set("{%(xml)s}space" % NAMESPACES, "preserve")
         text_node.text = text
         return text_node
@@ -331,13 +336,31 @@ class IfMergeField(MergeField):
                     child.tag = '{%(w)s}t' % NAMESPACES
                 self.filled_elements.append(elem)
 
+class GenericMergeField(MergeField):
+    
+    """ generic field, to be kept alone """
+
+    def _parse_instruction(self):
+        pass
+
+    def insert_into_tree(self):
+        # keep everything
+        # print("## KEEP")
+        # for i, elem in enumerate(self._elements_to_add):
+        #     print(i, etree.tostring(elem))
+        # print("## IGNORE")
+        # for i, elem in enumerate(self._elements_to_ignore):
+        #     print(i, etree.tostring(elem))
+
+        return self._elements_to_ignore[-1]
+
 class MergeData(object):
 
     """ prepare the MergeField objects and the data """
-    
+
     FIELD_CLASSES = {
         "MERGEFIELD": MergeField,
-        "IF": IfMergeField
+        "IF2": IfMergeField
     }
 
     def __init__(self):
@@ -369,18 +392,30 @@ class MergeData(object):
         s.escape = ''
         return s
 
-    def make_data_field(self, parent, key=None, instr=None, elements=None, **kwargs):
+    @classmethod
+    def _get_field_type(cls, instr):
+        s = shlex.split(instr, posix=False)
+        return s[0]
+
+    def make_data_field(self, parent, key=None, nested=False, instr=None, elements=None, **kwargs):
         """ MergeField factory method """
         if key is None:
             key = self._get_next_key()
 
-        instr = instr or self._get_instr_text(elements)        
-        tokens = list(self._get_instr_tokens(instr))
-        field_class = self.FIELD_CLASSES.get(tokens[0], MergeField)
+        instr = instr or self._get_instr_text(elements)
+        field_type = self._get_field_type(instr)
+        field_class = self.FIELD_CLASSES.get(field_type)
+        if field_class is None:
+            tokens = [field_type, ""]
+            field_class = GenericMergeField
+        else:
+            tokens = list(self._get_instr_tokens(instr))
+        # print("make data object", field_class, instr, len(elements), len(kwargs.get('ignore_elements', [])))
         field_obj = field_class(
             parent,
             key=key,
             instr=instr,
+            nested=nested,
             instr_tokens=tokens,
             elements=elements,
             **kwargs
@@ -568,10 +603,12 @@ class MailMerge(object):
                 name = self.parse_instr(instr)
                 if name is None:
                     continue
-                child.tag = '{%(w)s}r' % NAMESPACES
-                child.attrib.clear()
+
+                elem_to_add = child.find('{%(w)s}r' % NAMESPACES)
+                parent.replace(child, elem_to_add)
+
                 merge_field_obj = self.merge_data.make_data_field(
-                    parent, name=name, instr=instr, elements=[child])
+                    parent, name=name, instr=instr, elements=[elem_to_add])
                 merge_field_obj.insert_into_tree()
                 # parent[idx] = Element('MergeField', name=merge_field_key)
 
@@ -588,7 +625,7 @@ class MailMerge(object):
 
         return next_element, field_char_subelem, field_char_subelem.xpath('@w:fldCharType', namespaces=NAMESPACES)[0]
 
-    def _pull_next_merge_field(self, elements_of_type_begin):
+    def _pull_next_merge_field(self, elements_of_type_begin, nested=False):
         assert (elements_of_type_begin)
         current_element = elements_of_type_begin.pop(0)
         parent_element = current_element.getparent()
@@ -597,7 +634,7 @@ class MailMerge(object):
         current_element_list = good_elements
         field_char_type = None
 
-        # print('<<<<<')
+        # print('>>>>>>>')
         while field_char_type != 'end':
             # find next sibling
             next_element, field_char_subelem, field_char_type = \
@@ -608,16 +645,20 @@ class MailMerge(object):
             if field_char_type == 'begin':
                 # nested elements
                 assert(elements_of_type_begin[0] is next_element)
-                merge_field_sub_obj = self._pull_next_merge_field(elements_of_type_begin)
+                merge_field_sub_obj = self._pull_next_merge_field(elements_of_type_begin, nested=True)
                 next_element = merge_field_sub_obj.insert_into_tree()
+                # print("current list is ignore", current_element_list is ignore_elements)
+                # print("<<<<< #####", etree.tostring(next_element))
             elif field_char_type == 'separate':
                 current_element_list = ignore_elements
 
             current_element_list.append(next_element)
             current_element = next_element
         
+        # print('<<<<<<<', len(good_elements), len(ignore_elements))
         return self.merge_data.make_data_field(
             parent_element,
+            nested=nested,
             elements=good_elements,
             ignore_elements=ignore_elements)
 
@@ -647,10 +688,10 @@ class MailMerge(object):
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
                 if zi in self.parts:
-                    xml = etree.tostring(self.parts[zi].getroot())
+                    xml = etree.tostring(self.parts[zi].getroot(), encoding='UTF-8', xml_declaration=True)
                     output.writestr(zi.filename, xml)
                 elif zi == self._settings_info:
-                    xml = etree.tostring(self.settings.getroot())
+                    xml = etree.tostring(self.settings.getroot(), encoding='UTF-8', xml_declaration=True)
                     output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
