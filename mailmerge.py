@@ -1,3 +1,4 @@
+from turtle import update
 import warnings
 import shlex
 import re
@@ -194,25 +195,6 @@ class MergeField(object):
         text_node.set("{%(xml)s}space" % NAMESPACES, "preserve")
         text_node.text = text
         return text_node
-
-        # for i, elem in enumerate(self._elements_to_add):
-        #     if elem.tag == 'MergeField':
-        #         filled_elem = merge_data.fill_field(elem, row)
-        #         self.filled_elements.extend(filled_elem.filled_elements)
-        #         continue
-        #     # if self.name:
-        #     #     text = row.get('name','')
-        #     #     text_parts = str(text).replace('\r', '').split('\n')
-        #     #     for i, text_part in enumerate(text_parts):
-        #     #         text_node = Element('{%(w)s}t' % NAMESPACES)
-        #     #         text_node.text = text_part
-        #     #         nodes.append(text_node)
-
-        #     #         # if not last node add new line node
-        #     #         if i < (len(text_parts) - 1):
-        #     #             nodes.append(Element('{%(w)s}br' % NAMESPACES))
-
-        #     self.filled_elements.append(elem)
 
     def insert_into_tree(self):
         """ inserts a MergeField element in the original tree at the right position
@@ -496,7 +478,7 @@ class MergeDocument(object):
 
         self._body_copy = deepcopy(self._body)
 
-        #EMPTY THE BODY
+        #EMPTY THE BODY - PREPARE TO FILL IT WITH DATA
         self._body.clear()
 
         self._separator = etree.Element('{%(w)s}p'  % NAMESPACES)
@@ -551,12 +533,16 @@ class MailMerge(object):
 
     """
 
-    def __init__(self, file, remove_empty_tables=False):
+    def __init__(self, file, remove_empty_tables=False, auto_update_fields_on_open="no"):
+        """ 
+        auto_update_fields_on_open : no, auto, always - auto = only when needed
+        """
         self.zip = ZipFile(file)
         self.parts = {} # part: ElementTree
         self.settings = None
         self._settings_info = None
         self.remove_empty_tables = remove_empty_tables
+        self.auto_update_fields_on_open = auto_update_fields_on_open
         self.merge_data = MergeData()
 
         try:
@@ -567,7 +553,7 @@ class MailMerge(object):
                 self.__fill_complex_fields(part)
 
             # Remove mail merge settings to avoid error messages when opening document in Winword
-            self.__remove_mailmerge_settings()
+            self.__fix_settings()
         except:
             self.zip.close()
             raise
@@ -670,13 +656,19 @@ class MailMerge(object):
             # print(merge_field_obj.instr)
             merge_field_obj.insert_into_tree()
 
-    def __remove_mailmerge_settings(self):
+    def __fix_settings(self):
 
         if self.settings:
             settings_root = self.settings.getroot()
             mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
             if mail_merge is not None:
                 settings_root.remove(mail_merge)
+            
+            if self.auto_update_fields_on_open in ["auto", "always"]:
+                update_fields_elem = settings_root.find('{%(w)s}updateFields' % NAMESPACES)
+                if not update_fields_elem:
+                    update_fields_elem = etree.SubElement(settings_root, '{%(w)s}updateFields' % NAMESPACES)
+                update_fields_elem.set('{%(w)s}val' % NAMESPACES, "true")
 
     def __get_tree_of_file(self, file):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
