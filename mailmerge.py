@@ -1,4 +1,3 @@
-from turtle import update
 import warnings
 import shlex
 import re
@@ -29,15 +28,6 @@ VALID_SEPARATORS = {
     'continuous_section', 'evenPage_section', 'nextColumn_section', 'nextPage_section', 'oddPage_section'}
 
 NUMBERFORMAT_RE = r"([^0.,#PN]+)?(P\d+|N\d+|[0.,#]+%?)([^0.,#%].*)?"
-OPERATOR_MAP = {
-    "<>": lambda x,y:x!=y,
-    "=": lambda x,y:x==y,
-    "<=": lambda x,y:x<=y,
-    "<": lambda x,y:x<y,
-    ">=": lambda x,y:x>=y,
-    ">": lambda x,y:x>y
-}
-
 
 class MergeField(object):
     """
@@ -74,10 +64,6 @@ class MergeField(object):
         del self._elements_to_add[1:]
         # pass
     
-    def get_sub_fields(self):
-        # no sub fields
-        yield from ()
-
     def _format(self, value):
         if self.instr_tokens[2:]:
             flag = self.instr_tokens[2][0:2]
@@ -210,131 +196,6 @@ class MergeField(object):
         self.parent.replace(self._elements_to_add[0], replacement_element)
         return replacement_element
 
-class IfMergeField(MergeField):
-
-    def __init__(self, *args, **kwargs):
-        self._elements_for_cond = []
-        self._elements_for_true = []
-        self._elements_for_false = []
-        super().__init__(*args, **kwargs)
-
-    def _parse_instruction(self):
-
-        self.name = ""
-        # if 4 then empty no
-        assert len(self.instr_tokens) in [5, 6], self.instr_tokens
-
-        # we compute first the start/end of each token
-        tokens_with_start_end = []
-        start = 0
-        for token in self.instr_tokens:
-            if not token:
-                pos = self.instr.index('""', start) + 1
-            else:
-                pos = self.instr.index(token, start)
-            tokens_with_start_end.append((token, pos, pos+len(token)))
-            start = pos + len(token)
-        tokens_with_start_end.append(("", len(self.instr), len(self.instr)))
-        
-        # we filter the elements for each part (condition, true, false)
-        self._elements_for_cond = self._filter_elements(tokens_with_start_end[1][1], tokens_with_start_end[3][2])
-        self._elements_for_true = self._filter_elements(*tokens_with_start_end[4][1:3])
-        self._elements_for_false = self._filter_elements(*tokens_with_start_end[5][1:3])
-
-    def get_sub_fields(self):
-        for elem in self._elements_for_cond + self._elements_for_true + self._elements_for_false:
-            if elem.tag == 'MergeField':
-                yield elem
-
-    def _filter_elements(self, start_pos, end_pos):
-
-        element_list = []
-        pos_of_elem = 0
-        for i, elem in enumerate(self._elements_to_add):
-            if pos_of_elem > end_pos:
-                break
-            if elem.tag == 'MergeField':
-                text = "{{{}}}".format(elem.get('name'))
-            else:
-                text = "".join([t for t in elem.xpath('w:instrText/text()', namespaces=NAMESPACES)])
-
-            end_text_pos = pos_of_elem + len(text)
-            if end_text_pos >= start_pos:
-                # we maybe started the yes
-                start_of_text = 0 if start_pos <= pos_of_elem else start_pos - pos_of_elem
-                end_of_text = len(text) if end_pos >= end_text_pos else end_pos - pos_of_elem
-                len_of_text = end_of_text - start_of_text
-                if len_of_text > 0 or not text:
-                    # we need to include the element
-                    if len_of_text < len(text):
-                        # only part of the element
-                        elem = deepcopy(elem)
-                        text_elem = elem.xpath('w:instrText', namespaces=NAMESPACES)[0]
-                        text_elem.text = text_elem.text[start_of_text:end_of_text]
-
-                    element_list.append(elem)
-            pos_of_elem = end_text_pos
-
-        # for elem in element_list:
-        #     print("<", "".join([t for t in elem.xpath('w:instrText/text()', namespaces=NAMESPACES)]), ">")
-        return element_list
-
-    def fill_data(self, merge_data, row):
-        # first check the condition
-        data_dict = {}
-        # print("if lists", len(self._elements_for_cond), len(self._elements_for_true), len(self._elements_for_false))
-        for i, elem in enumerate(self._elements_for_cond):
-            # print(etree.tostring(elem))
-            if elem.tag == 'MergeField':
-                filled_elem = merge_data.fill_field(elem, row)
-                data_dict["{{{}}}".format(filled_elem.key)] = filled_elem.filled_value
-        
-        expr1 = self.instr_tokens[1] or '""'
-        expr1 = data_dict.get(expr1, expr1)
-        cond_operator = OPERATOR_MAP[self.instr_tokens[2]]
-        expr2 = self.instr_tokens[3] or '""'
-        expr2 = data_dict.get(expr2, expr2)
-        if type(expr1) != type(expr2):
-            expr2 = type(expr1)(expr2)
-
-        # print(data_dict)
-        # print("condition", self.instr_tokens[1:4], "({}({}), {}({}))".format(
-        #     expr1, type(expr1), expr2, type(expr2)), "result", cond_operator(expr1, expr2))
-        if cond_operator(expr1, expr2):
-            # true value
-            self._elements_to_add = self._elements_for_true
-        else:
-            # false value
-            self._elements_to_add = self._elements_for_false
-
-        self.filled_elements = []
-        for i, elem in enumerate(self._elements_to_add):
-            if elem.tag == 'MergeField':
-                filled_elem = merge_data.fill_field(elem, row)
-                self.filled_elements.extend(filled_elem.filled_elements)
-            else:
-                elem = deepcopy(elem)
-                for child in elem.xpath('w:instrText', namespaces=NAMESPACES):
-                    child.tag = '{%(w)s}t' % NAMESPACES
-                self.filled_elements.append(elem)
-
-class GenericMergeField(MergeField):
-    
-    """ generic field, to be kept alone """
-
-    def _parse_instruction(self):
-        pass
-
-    def insert_into_tree(self):
-        # keep everything
-        # print("## KEEP")
-        # for i, elem in enumerate(self._elements_to_add):
-        #     print(i, etree.tostring(elem))
-        # print("## IGNORE")
-        # for i, elem in enumerate(self._elements_to_ignore):
-        #     print(i, etree.tostring(elem))
-
-        return self._elements_to_ignore[-1]
 
 class MergeData(object):
 
@@ -342,20 +203,17 @@ class MergeData(object):
 
     FIELD_CLASSES = {
         "MERGEFIELD": MergeField,
-        "IF2": IfMergeField
     }
 
     def __init__(self):
         self._merge_field_map = {} # merge_field.key: MergeField()
         self._merge_field_next_id = 0
+        self.has_nested_fields = False
 
     def get_merge_fields(self, key):
         merge_obj = self.get_field_obj(key)
         if merge_obj.name:
             yield merge_obj.name
-        else:
-            for merge_field_elem in merge_obj.get_sub_fields():
-                yield from self.get_merge_fields(merge_field_elem.get('name'))
 
     @classmethod
     def _get_instr_text(cls, elements):
@@ -388,10 +246,10 @@ class MergeData(object):
         field_type = self._get_field_type(instr)
         field_class = self.FIELD_CLASSES.get(field_type)
         if field_class is None:
-            tokens = [field_type, ""]
-            field_class = GenericMergeField
-        else:
-            tokens = list(self._get_instr_tokens(instr))
+            # ignore the field
+            return None
+
+        tokens = list(self._get_instr_tokens(instr))
         # print("make data object", field_class, instr, len(elements), len(kwargs.get('ignore_elements', [])))
         field_obj = field_class(
             parent,
@@ -404,6 +262,8 @@ class MergeData(object):
         )
 
         assert key not in self._merge_field_map
+        if nested:
+            self.has_nested_fields = True
         self._merge_field_map[key] = field_obj
         return field_obj
 
@@ -501,7 +361,6 @@ class MergeDocument(object):
         merge_data.replace(body, row)
         for child in body:
             self._body.append(child)
-
 
     def __enter__(self):
         return self
@@ -631,8 +490,9 @@ class MailMerge(object):
             if field_char_type == 'begin':
                 # nested elements
                 assert(elements_of_type_begin[0] is next_element)
-                merge_field_sub_obj = self._pull_next_merge_field(elements_of_type_begin, nested=True)
-                next_element = merge_field_sub_obj.insert_into_tree()
+                merge_field_sub_obj, next_element = self._pull_next_merge_field(elements_of_type_begin, nested=True)
+                if merge_field_sub_obj:
+                    next_element = merge_field_sub_obj.insert_into_tree()
                 # print("current list is ignore", current_element_list is ignore_elements)
                 # print("<<<<< #####", etree.tostring(next_element))
             elif field_char_type == 'separate':
@@ -642,19 +502,21 @@ class MailMerge(object):
             current_element = next_element
         
         # print('<<<<<<<', len(good_elements), len(ignore_elements))
-        return self.merge_data.make_data_field(
+        merge_obj = self.merge_data.make_data_field(
             parent_element,
             nested=nested,
             elements=good_elements,
             ignore_elements=ignore_elements)
+        return merge_obj, current_element
 
     def __fill_complex_fields(self, part):
         """ finds all begin fields and then builds the MergeField objects and inserts the replacement Elements in the tree """
         elements_of_type_begin = list(part.findall('.//{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES))
         while elements_of_type_begin:
-            merge_field_obj = self._pull_next_merge_field(elements_of_type_begin)
-            # print(merge_field_obj.instr)
-            merge_field_obj.insert_into_tree()
+            merge_field_obj, _ = self._pull_next_merge_field(elements_of_type_begin)
+            if merge_field_obj:
+                # print(merge_field_obj.instr)
+                merge_field_obj.insert_into_tree()
 
     def __fix_settings(self):
 
@@ -664,7 +526,11 @@ class MailMerge(object):
             if mail_merge is not None:
                 settings_root.remove(mail_merge)
             
-            if self.auto_update_fields_on_open in ["auto", "always"]:
+            add_update_fields_setting = (
+                self.auto_update_fields_on_open == "auto" and self.merge_data.has_nested_fields
+                or self.auto_update_fields_on_open == "always"
+            )
+            if add_update_fields_setting:
                 update_fields_elem = settings_root.find('{%(w)s}updateFields' % NAMESPACES)
                 if not update_fields_elem:
                     update_fields_elem = etree.SubElement(settings_root, '{%(w)s}updateFields' % NAMESPACES)
