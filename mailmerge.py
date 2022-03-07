@@ -246,6 +246,7 @@ class MergeData(object):
         field_class = self.FIELD_CLASSES.get(field_type)
         if field_class is None:
             # ignore the field
+            # print("ignore field", instr)
             return None
 
         try:
@@ -377,13 +378,10 @@ class MailMerge(object):
     """
     MailMerge class to write an output docx document by merging data rows to a template
 
-    RESTRICTIONS:
-        The field text must NOT contain new paragraphs.
     The class uses the builtin MergeFields in Word. There are two kind of data fields, simple and complex.
     http://officeopenxml.com/WPfields.php
-    Also, there are other kind of fields that are of interest, mainly IF fields that define conditional output depending on the 
-    outcome of a condition, the condition and the output can contain other IF and MERGEFIELD fields as well.
     The MERGEFIELD can have MERGEFORMAT
+    MERGEFIELD can be nested inside other "complex" fields, in which case those fields should be updated in the saved docx
 
     MailMerge implements this by finding all Fields and replacing them with placeholder Elements of type
     MergeElement
@@ -457,14 +455,19 @@ class MailMerge(object):
 
                 merge_field_obj = self.merge_data.make_data_field(
                     parent, name=name, instr=instr, elements=[elem_to_add])
-                merge_field_obj.insert_into_tree()
+                if merge_field_obj:
+                    merge_field_obj.insert_into_tree()
                 # parent[idx] = Element('MergeField', name=merge_field_key)
 
     def __get_next_element(self, current_element):
         """ returns the next element of a complex field """
         next_element = current_element.getnext()
-        if next_element is None:
-            return None, None, None
+        current_paragraph = current_element.getparent()
+        while next_element is None:
+            current_paragraph = current_paragraph.getnext()
+            if current_paragraph is None:
+                return None, None, None
+            next_element = current_paragraph.find('w:r', namespaces=NAMESPACES)
         
         # print(''.join(next_element.xpath('w:instrText/text()', namespaces=NAMESPACES)))
         field_char_subelem = next_element.find('w:fldChar', namespaces=NAMESPACES)
@@ -488,6 +491,7 @@ class MailMerge(object):
             next_element, field_char_subelem, field_char_type = \
                 self.__get_next_element(current_element)
             if next_element is None:
+                
                 instr_text = self.merge_data.get_instr_text(good_elements, recursive=True)
                 raise ValueError("begin without end near:" + instr_text)
 
