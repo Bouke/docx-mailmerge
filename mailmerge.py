@@ -215,13 +215,12 @@ class MergeData(object):
         if merge_obj.name:
             yield merge_obj.name
 
-    @classmethod
-    def _get_instr_text(cls, elements):
+    def get_instr_text(self, elements, recursive=False):
         return "".join([
             text
             for elem in elements
             for text in elem.xpath('w:instrText/text()', namespaces=NAMESPACES) + [
-                "{{{}}}".format(obj_name) for obj_name in elem.xpath('@name')]
+                "{{{}}}".format(obj_name) if not recursive else self.get_field_obj(obj_name).instr for obj_name in elem.xpath('@name')]
         ])
 
     @classmethod
@@ -242,14 +241,18 @@ class MergeData(object):
         if key is None:
             key = self._get_next_key()
 
-        instr = instr or self._get_instr_text(elements)
+        instr = instr or self.get_instr_text(elements)
         field_type = self._get_field_type(instr)
         field_class = self.FIELD_CLASSES.get(field_type)
         if field_class is None:
             # ignore the field
             return None
 
-        tokens = list(self._get_instr_tokens(instr))
+        try:
+            tokens = list(self._get_instr_tokens(instr))
+        except ValueError as e:
+            raise ValueError(str(e) + " near: " + instr)
+
         # print("make data object", field_class, instr, len(elements), len(kwargs.get('ignore_elements', [])))
         field_obj = field_class(
             parent,
@@ -485,7 +488,8 @@ class MailMerge(object):
             next_element, field_char_subelem, field_char_type = \
                 self.__get_next_element(current_element)
             if next_element is None:
-                raise ValueError("begin without end")
+                instr_text = self.merge_data.get_instr_text(good_elements, recursive=True)
+                raise ValueError("begin without end near:" + instr_text)
 
             if field_char_type == 'begin':
                 # nested elements
