@@ -568,6 +568,10 @@ class MailMerge(object):
                 # print("<<<<< #####", etree.tostring(next_element))
             elif field_char_type == 'separate':
                 current_element_list = ignore_elements
+            elif next_element.tag == 'MergeField':
+                # we have a nested simple Field - mark it as nested
+                self.merge_data.get_field_obj(next_element.get('merge_key')).nested = True
+
 
             current_element_list.append(next_element)
             current_element = next_element

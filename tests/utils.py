@@ -32,10 +32,10 @@ class EtreeMixin(object):
         try:
             self.assert_equal_tree(lhs, rhs)
         except:
-            with open("expected.xml", "w") as f:
-                f.write(etree.tostring(lhs.getroottree().getroot(), pretty_print=True))
-            with open("real.xml", "w") as f:
-                f.write(etree.tostring(rhs.getroottree().getroot(), pretty_print=True))
+            with open("expected.xml", "wb") as f:
+                f.write(etree.tostring(lhs.getroottree().getroot(), encoding='UTF-8', pretty_print=True))
+            with open("real.xml", "wb") as f:
+                f.write(etree.tostring(rhs.getroottree().getroot(), encoding='UTF-8', pretty_print=True))
             raise
 
     def open_docx(self, filename):
