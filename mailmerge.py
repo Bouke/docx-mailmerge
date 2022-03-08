@@ -281,6 +281,11 @@ class MergeData(object):
     def get_field_obj(self, key):
         return self._merge_field_map[key]
 
+    def mark_field_as_nested(self, key, nested=True):
+        if nested:
+            self.has_nested_fields = True
+        self.get_field_obj(key).nested = nested
+
     def _get_next_key(self):
         key = "field_{}".format(self._merge_field_next_id)
         self._merge_field_next_id += 1
@@ -570,8 +575,7 @@ class MailMerge(object):
                 current_element_list = ignore_elements
             elif next_element.tag == 'MergeField':
                 # we have a nested simple Field - mark it as nested
-                self.merge_data.get_field_obj(next_element.get('merge_key')).nested = True
-
+                self.merge_data.mark_field_as_nested(next_element.get('merge_key'))
 
             current_element_list.append(next_element)
             current_element = next_element
