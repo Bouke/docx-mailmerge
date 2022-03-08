@@ -103,7 +103,7 @@ class MergeField(object):
         return value
 
     def _format_number(self, value, flag, option):
-        format_match = re.fullmatch(NUMBERFORMAT_RE, option)
+        format_match = re.match(NUMBERFORMAT_RE, option)
         if format_match is None:
             warnings.warn("Non conforming number format <{}>".format(option))
             return value
@@ -117,7 +117,7 @@ class MergeField(object):
                     value,
                     format_suffix)
         if format_number[0] == 'N':
-            return "{{}}{{:.{}}}{{}}".format(
+            return "{{}}{{:.{}f}}{{}}".format(
                 int(format_number[1:])).format(
                     format_prefix,
                     value,
@@ -133,7 +133,7 @@ class MergeField(object):
         zero_digits = len(digits.replace('#', ''))
         zero_decimals = len(decimals.replace('#', ''))
         len_decimals_plus_dot = 0 if not decimals else 1 + len(decimals)
-        number_format_text = "{{}}{{:{thousand_flag}{zero_digits}{decimals}f}}{{}}".format(
+        number_format_text = "{{}}{{:{zero_digits}{thousand_flag}{decimals}f}}{{}}".format(
             thousand_flag=thousand_flag,
             zero_digits="0>{}".format(zero_digits + len_decimals_plus_dot) if zero_digits > 0 else "",
             decimals=".{}".format(len(decimals)))
@@ -539,6 +539,7 @@ class MailMerge(object):
         return next_element, field_char_subelem, field_char_subelem.xpath('@w:fldCharType', namespaces=NAMESPACES)[0]
 
     def _pull_next_merge_field(self, elements_of_type_begin, nested=False):
+
         assert (elements_of_type_begin)
         current_element = elements_of_type_begin.pop(0)
         parent_element = current_element.getparent()
