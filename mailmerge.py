@@ -154,8 +154,12 @@ class MergeField(object):
         self.filled_value = value
 
         if value is None:
-            # no elements should be filled
-            return
+            # no elements should be filled ?
+            # or empty text ?
+            if MAKE_TESTS_HAPPY:
+                value = ""
+            else:
+                return
         
         elem = deepcopy(self._elements_to_add[0])
         for child in elem.xpath('w:instrText', namespaces=NAMESPACES):
@@ -462,6 +466,9 @@ class MailMerge(object):
                 # <fldSimple ..><w:r>...</w:r></fldSimple>
                 # to be consistent with the complex fields, we move the <w:r> element up one level
                 elem_to_add = child.find('{%(w)s}r' % NAMESPACES)
+                if MAKE_TESTS_HAPPY:
+                    elem_to_add.clear()
+
                 parent.replace(child, elem_to_add)
 
                 merge_field_obj = self.merge_data.make_data_field(
@@ -613,6 +620,22 @@ class MailMerge(object):
             with MergeDocument(root, separator) as merge_doc:
                 for i, row in enumerate(replacements):
                     merge_doc.merge(self.merge_data, row, first=(i==0))
+
+    def merge_pages(self, replacements):
+         """
+         Deprecated method.
+         """
+         warnings.warn("merge_pages has been deprecated in favour of merge_templates",
+                      category=DeprecationWarning,
+                      stacklevel=2)         
+         self.merge_templates(replacements, "page_break")
+
+    def merge(self, parts=None, **replacements):
+        if not parts:
+            parts = self.parts.values()
+
+        for part in parts:
+            self.merge_data.replace(part, replacements)
 
     def __enter__(self):
         return self
