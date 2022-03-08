@@ -2,7 +2,7 @@ class EtreeMixin(object):
 
     IGNORED_FIELDS=[
         "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rsidR"
-        # ,"{http://www.w3.org/XML/1998/namespace}space"
+        ,"{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rsidRPr"
         ]
 
     def filter_item(self, item):
