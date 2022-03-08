@@ -198,7 +198,7 @@ class MergeField(object):
         for subelem in self._elements_to_add[1:]:
             self.parent.remove(subelem)
 
-        replacement_element = Element("MergeField", name=self.key)
+        replacement_element = Element("MergeField", merge_key=self.key, name=self.name)
         self.parent.replace(self._elements_to_add[0], replacement_element)
         return replacement_element
 
@@ -211,10 +211,11 @@ class MergeData(object):
         "MERGEFIELD": MergeField,
     }
 
-    def __init__(self):
+    def __init__(self, remove_empty_tables=False):
         self._merge_field_map = {} # merge_field.key: MergeField()
         self._merge_field_next_id = 0
         self.has_nested_fields = False
+        self.remove_empty_tables = remove_empty_tables
 
     def get_merge_fields(self, key):
         merge_obj = self.get_field_obj(key)
@@ -226,7 +227,7 @@ class MergeData(object):
             text
             for elem in elements
             for text in elem.xpath('w:instrText/text()', namespaces=NAMESPACES) + [
-                "{{{}}}".format(obj_name) if not recursive else self.get_field_obj(obj_name).instr for obj_name in elem.xpath('@name')]
+                "{{{}}}".format(obj_name) if not recursive else self.get_field_obj(obj_name).instr for obj_name in elem.xpath('@merge_key')]
         ])
 
     @classmethod
@@ -287,16 +288,52 @@ class MergeData(object):
 
     def replace(self, body, row):
         """ replaces in the body xml tree the MergeField elements with values from the row """
+        all_tables = {
+            key: value
+            for key, value in row.items()
+            if isinstance(value, list)
+            }
+
+        for anchor, table_rows in all_tables.items():
+            self.replace_table_rows(body, anchor, table_rows)
+
         merge_fields = body.findall('.//MergeField')
         for field_element in merge_fields:
             filled_field = self.fill_field(field_element, row)
-            for text_element in reversed(filled_field.filled_elements):
-                field_element.addnext(text_element)
-            field_element.getparent().remove(field_element)
+            if filled_field:
+                for text_element in reversed(filled_field.filled_elements):
+                    field_element.addnext(text_element)
+                field_element.getparent().remove(field_element)
+    
+    def replace_table_rows(self, body, anchor, rows):
+        """ replace the rows of a table with the values from the rows list """
+        table, idx, template = self.__find_row_anchor(body, anchor)
+        if table is not None:
+            if len(rows) > 0:
+                del table[idx]
+                for i, row_data in enumerate(rows):
+                    row = deepcopy(template)
+                    self.replace(row, row_data)
+                    table.insert(idx + i, row)
+            else:
+                # if there is no data for a given table
+                # we check whether table needs to be removed
+                if self.remove_empty_tables:
+                    parent = table.getparent()
+                    parent.remove(table)
+
+    def __find_row_anchor(self, body, field):
+        for table in body.findall('.//{%(w)s}tbl' % NAMESPACES):
+            for idx, row in enumerate(table):
+                if row.find('.//MergeField[@name="%s"]' % field) is not None:
+                    return table, idx, row
+        return None, None, None
     
     def fill_field(self, field_element, row):
         """" fills the corresponding MergeField python object with data from row """
-        field_key = field_element.get('name')
+        if field_element.get('name') not in row:
+            return None
+        field_key = field_element.get('merge_key')
         field_obj = self._merge_field_map[field_key]
         field_obj.fill_data(self, row)
         return field_obj
@@ -414,9 +451,9 @@ class MailMerge(object):
         self.parts = {} # part: ElementTree
         self.settings = None
         self._settings_info = None
+        self.merge_data = MergeData(remove_empty_tables=remove_empty_tables)
         self.remove_empty_tables = remove_empty_tables
         self.auto_update_fields_on_open = auto_update_fields_on_open
-        self.merge_data = MergeData()
 
         try:
             self.__fill_parts()
@@ -430,6 +467,12 @@ class MailMerge(object):
         except:
             self.zip.close()
             raise
+
+
+    def __setattr__(self, __name, __value):
+        super(MailMerge, self).__setattr__(__name, __value)
+        if __name == 'remove_empty_tables':
+            self.merge_data.remove_empty_tables = __value
 
     @classmethod
     def parse_instr(cls, instr):
@@ -568,7 +611,12 @@ class MailMerge(object):
         zi = self.zip.getinfo(fn)
         return zi, etree.parse(self.zip.open(zi))
 
-    def write(self, file):
+    def write(self, file, empty_value=''):
+        if empty_value is not None:
+            self.merge(**{
+                field: empty_value
+                for field in self.get_merge_fields()
+            })
 
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
@@ -588,7 +636,7 @@ class MailMerge(object):
         fields = set()
         for part in parts:
             for mf in part.findall('.//MergeField'):
-                for name in self.merge_data.get_merge_fields(mf.attrib['name']):
+                for name in self.merge_data.get_merge_fields(mf.attrib['merge_key']):
                     fields.add(name)
         return fields
 
@@ -636,6 +684,12 @@ class MailMerge(object):
 
         for part in parts:
             self.merge_data.replace(part, replacements)
+
+    def merge_rows(self, anchor, rows):
+        """ anchor is one of the fields in the table """
+
+        for part in self.parts.values():
+            self.merge_data.replace_table_rows(part, anchor, rows)
 
     def __enter__(self):
         return self
