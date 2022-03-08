@@ -1,4 +1,13 @@
 class EtreeMixin(object):
+
+    IGNORED_FIELDS=[
+        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rsidR"
+        # ,"{http://www.w3.org/XML/1998/namespace}space"
+        ]
+
+    def filter_item(self, item):
+        return item[0] not in self.IGNORED_FIELDS
+
     def assert_equal_tree(self, lhs, rhs):
         """
         Compares two instances of ElementTree are equivalent.
@@ -6,7 +15,7 @@ class EtreeMixin(object):
         self.assertEqual(lhs.tag, rhs.tag)
         self.assertEqual(len(lhs), len(rhs))
         self.assertEqual(lhs.text or '', rhs.text or '')
-        self.assertEqual(sorted(lhs.items()), sorted(rhs.items()))
+        self.assertEqual(sorted(filter(self.filter_item, lhs.items())), sorted(filter(self.filter_item, rhs.items())))
         for lhs_child, rhs_child in zip(lhs, rhs):
             self.assert_equal_tree(lhs_child, rhs_child)
 
