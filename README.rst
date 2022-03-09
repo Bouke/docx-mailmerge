@@ -30,7 +30,9 @@ Open the file.
 ::
 
     from mailmerge import MailMerge
-    with MailMerge('input.docx') as document:
+    with MailMerge('input.docx',
+            remove_empty_tables=False,
+            auto_update_fields_on_open="no") as document:
         ...
 
 
@@ -50,6 +52,9 @@ Merge table rows. In your template, add a MergeField to the row you would like
 to designate as template. Supply the name of this MergeField as ``anchor``
 parameter. The second parameter contains the rows with key-value pairs for
 the MergeField replacements.
+
+If the tables are empty and you want them removed, set remove_empty_tables=True
+in constructor.
 ::
 
     document.merge_rows('col1',
@@ -85,6 +90,26 @@ documents.
     ], separator='page_break')
 
 
+Starting in version 0.5.0 the fields formatting is respected when compatible
+Numeric, Text, Conditional fields are already implemented. Date formatting 
+is work in progress.
+You can also use the merge fields inside other fields, for example to insert
+pictures in the docx {INCLUDEPICTURE} or for conditional texts {IF}
+::
+
+    { INCLUDEPICTURE "{ MERGEFIELD path }/{ MERGEFIELD image }" }
+
+If the fields are nested inside other fields, the outer fields need to be
+updated in Word. This can be done by selecting everything (CTRL-a) and then
+update the fields (F9). There is a way to force the Word to update fields
+automatically when opening the document. docx-mailmerge can set this
+setting when saving the document. You can configure this feature by using
+the *auto_update_fields_on_open* parameter. The value *always* will set the
+setting regardless if needed or not and the value *auto* will only set it
+when necessary (when nested fields exist). The default value *no* will not
+activate this setting.
+
+
 Write document to file. This should be a new file, as ``ZipFile`` cannot modify
 existing zip files.
 ::
@@ -97,7 +122,7 @@ with Python`_ on Practical Business Python for more information and examples.
 Todo / Wish List
 ================
 
-* Image merging.
+* Date formatting
 
 
 Contributing
