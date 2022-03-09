@@ -64,20 +64,33 @@ class MergeField(object):
         # # we keep only the first node, and will add the text to this node
         self._elements_to_ignore.extend(self._elements_to_add[1:])
         del self._elements_to_add[1:]
-        # pass
+        first_elem = self._elements_to_add[0]
+        if first_elem.tag == '{%(w)s}fldSimple' % NAMESPACES:
+            # workaround for simple fields
+            elem_to_add = first_elem.find('{%(w)s}r' % NAMESPACES)
+            if MAKE_TESTS_HAPPY:
+                elem_to_add.clear()
+            self.parent.replace(first_elem, elem_to_add)
+            self._elements_to_add[0] = elem_to_add
     
     def _format(self, value):
-        if self.instr_tokens[2:]:
-            flag = self.instr_tokens[2][0:2]
-            option = ''.join([self.instr_tokens[2][2:]] + self.instr_tokens[3:])
+        options = self.instr_tokens[2:]
+        while options:
+            flag = options[0][0:2]
+            if options[0][2:]: # no space after the flag
+                option = options[0][2:]
+                options = options[1:]
+            else:
+                option = options[1]
+                options = options[2:]
             if flag in ('\\b', '\\f'):
-                return self._format_bf(value, flag, option)
+                value = self._format_bf(value, flag, option)
             if flag in ('\\#'):
-                return self._format_number(value, flag, option)
+                value = self._format_number(value, flag, option)
             if flag in ('\\@'):
-                return self._format_date(value, flag, option)
+                value = self._format_date(value, flag, option)
             if flag in ('\\*'):
-                return self._format_text(value, flag, option)
+                value = self._format_text(value, flag, option)
         return value
 
     def _format_bf(self, value, flag, option):
@@ -150,7 +163,11 @@ class MergeField(object):
     def fill_data(self, merge_data, row):
         self.filled_elements = []
         value = row.get(self.name, "UNKNOWN({})".format(self.instr))
-        value = self._format(value)
+        try:
+            value = self._format(value)
+        except Exception as e:
+            warnings.warn("Invalid formatting for field <{}> with error <{}>".format(self.instr, e))
+
         self.filled_value = value
 
         if value is None:
@@ -241,7 +258,7 @@ class MergeData(object):
     @classmethod
     def _get_field_type(cls, instr):
         s = shlex.split(instr, posix=False)
-        return s[0]
+        return s[0], s[1:]
 
     def make_data_field(self, parent, key=None, nested=False, instr=None, elements=None, **kwargs):
         """ MergeField factory method """
@@ -249,7 +266,7 @@ class MergeData(object):
             key = self._get_next_key()
 
         instr = instr or self.get_instr_text(elements)
-        field_type = self._get_field_type(instr)
+        field_type, rest = self._get_field_type(instr)
         field_class = self.FIELD_CLASSES.get(field_type)
         if field_class is None:
             # ignore the field
@@ -259,7 +276,8 @@ class MergeData(object):
         try:
             tokens = list(self._get_instr_tokens(instr))
         except ValueError as e:
-            raise ValueError(str(e) + " near: " + instr)
+            tokens = [field_type] + list(map(lambda part:part.replace('"', ''), rest))
+            warnings.warn("Invalid field description <{}> near: <{}>".format(str(e), instr))
 
         # print("make data object", field_class, instr, len(elements), len(kwargs.get('ignore_elements', [])))
         field_obj = field_class(
@@ -479,16 +497,6 @@ class MailMerge(object):
         if __name == 'remove_empty_tables':
             self.merge_data.remove_empty_tables = __value
 
-    @classmethod
-    def parse_instr(cls, instr):
-        args = shlex.split(instr, posix=False)
-        if args[0] != 'MERGEFIELD':
-            return None
-        name = args[1]
-        if name[0] == '"' and name[-1] == '"':
-            name = name[1:-1]
-        return name
-
     def __fill_parts(self):
         content_types = etree.parse(self.zip.open('[Content_Types].xml'))
         for file in content_types.findall('{%(ct)s}Override' % NAMESPACES):
@@ -499,31 +507,11 @@ class MailMerge(object):
                 self._settings_info, self.settings = self.__get_tree_of_file(file)
     
     def __fill_simple_fields(self, part):
-
-        for parent in part.findall('.//{%(w)s}fldSimple/..' % NAMESPACES):
-            for idx, child in enumerate(parent):
-                if child.tag != '{%(w)s}fldSimple' % NAMESPACES:
-                    continue
-                # print(etree.tostring(child))
-                instr = child.attrib['{%(w)s}instr' % NAMESPACES]
-
-                name = self.parse_instr(instr)
-                if name is None:
-                    continue
-
-                # <fldSimple ..><w:r>...</w:r></fldSimple>
-                # to be consistent with the complex fields, we move the <w:r> element up one level
-                elem_to_add = child.find('{%(w)s}r' % NAMESPACES)
-                if MAKE_TESTS_HAPPY:
-                    elem_to_add.clear()
-
-                parent.replace(child, elem_to_add)
-
-                merge_field_obj = self.merge_data.make_data_field(
-                    parent, name=name, instr=instr, elements=[elem_to_add])
-                if merge_field_obj:
-                    merge_field_obj.insert_into_tree()
-                # parent[idx] = Element('MergeField', name=merge_field_key)
+        for fld_simple_elem in part.findall('.//{%(w)s}fldSimple' % NAMESPACES):
+            merge_field_obj = self.merge_data.make_data_field(
+                fld_simple_elem.getparent(), instr=fld_simple_elem.get('{%(w)s}instr' % NAMESPACES), elements=[fld_simple_elem])
+            if merge_field_obj:
+                merge_field_obj.insert_into_tree()
 
     def __get_next_element(self, current_element):
         """ returns the next element of a complex field """

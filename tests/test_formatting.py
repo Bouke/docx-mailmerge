@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import warnings
 from os import path
 from lxml import etree
 
@@ -118,6 +119,41 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
                 ]
             }
         )
+
+    def test_text_b_and_f(self):
+        self._test_formats(
+            '\\b',
+            {
+                "(\" \\f \")": [
+                    (2, "(2)"),
+                    ("", "")
+                ]
+            }
+        )
+
+    def test_invalid_formatting_syntax(self):
+        with warnings.catch_warnings(record=True) as warning_list:
+            self._test_formats(
+                '\\b',
+                {
+                    "(\" \\f": [
+                        (2, "2"),
+                    ]
+                }
+            )
+            self.assertTrue(warning_list)
+
+    def test_invalid_formatting(self):
+        with warnings.catch_warnings(record=True) as warning_list:
+            self._test_formats(
+                '\\b',
+                {
+                    "(\" \\f": [
+                        (2, "2"),
+                    ]
+                }
+            )
+            self.assertTrue(warning_list)
 
     def tearDown(self):
         self.docx_zipfile.close()

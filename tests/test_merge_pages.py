@@ -1,5 +1,6 @@
 import unittest
 import tempfile
+import warnings
 from os import path
 from lxml import etree
 
@@ -12,11 +13,13 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
         with MailMerge(path.join(path.dirname(__file__), 'test_merge_pages.docx')) as document:
             self.assertEqual(document.get_merge_fields(), {'fieldname'})
 
-            document.merge_pages([
-                {'fieldname': "xyz"},
-                {'fieldname': "abc"},
-                {'fieldname': "2b v ~2b"},
-            ])
+            with warnings.catch_warnings(record=True) as warning_list:
+                document.merge_pages([
+                    {'fieldname': "xyz"},
+                    {'fieldname': "abc"},
+                    {'fieldname': "2b v ~2b"},
+                ])
+                self.assertTrue(any(item.category == DeprecationWarning for item in warning_list))
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
@@ -34,11 +37,13 @@ class MergeListTest(EtreeMixin, unittest.TestCase):
         with MailMerge(path.join(path.dirname(__file__), 'test_merge_pages_paged.docx')) as document:
             self.assertEqual(document.get_merge_fields(), {'fieldname'})
 
-            document.merge_pages([
-                {'fieldname': "xyz"},
-                {'fieldname': "abc"},
-                {'fieldname': "2b v ~2b"},
-            ])
+            with warnings.catch_warnings(record=True) as warning_list:
+                document.merge_pages([
+                    {'fieldname': "xyz"},
+                    {'fieldname': "abc"},
+                    {'fieldname': "2b v ~2b"},
+                ])
+                self.assertTrue(any(item.category == DeprecationWarning for item in warning_list))
 
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
