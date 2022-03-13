@@ -90,7 +90,7 @@ documents.
     ], separator='page_break')
 
 
-Starting in version 0.5.0 the fields formatting is respected when compatible
+Starting in version 0.6.0 the fields formatting is respected when compatible
 Numeric, Text, Conditional fields are already implemented. Date formatting 
 is work in progress.
 You can also use the merge fields inside other fields, for example to insert
