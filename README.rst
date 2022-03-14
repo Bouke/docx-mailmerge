@@ -144,7 +144,10 @@ unit test that demonstrates it. Run the test suite::
 Credits
 =======
 
-This library was written by `Bouke Haarsma`_ and contributors.
+This library was `originally` written by `Bouke Haarsma`_ and contributors.
+This repository is maintained by `Iulian Ciorăscu`.
 
 .. _Bouke Haarsma: https://twitter.com/BoukeHaarsma
 .. _Populating MS Word Templates with Python: http://pbpython.com/python-word-template.html
+.. _originally: https://github.com/Bouke/docx-mailmerge
+.. _Iulian Ciorăscu: https://github.com/iulica/
