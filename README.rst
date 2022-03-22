@@ -144,8 +144,8 @@ unit test that demonstrates it. Run the test suite::
 Credits
 =======
 
-This library was `originally` written by `Bouke Haarsma`_ and contributors.
-This repository is maintained by `Iulian Ciorăscu`.
+| This library was `originally`_ written by `Bouke Haarsma`_ and contributors.
+| This repository is maintained by `Iulian Ciorăscu`_.
 
 .. _Bouke Haarsma: https://twitter.com/BoukeHaarsma
 .. _Populating MS Word Templates with Python: http://pbpython.com/python-word-template.html
