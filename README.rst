@@ -16,7 +16,7 @@ Installation
 Installation with ``pip``:
 ::
 
-    $ pip install docx-mailmerge
+    $ pip install docx-mailmerge2
 
 
 Usage
