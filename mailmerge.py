@@ -386,6 +386,7 @@ class MergeDocument(object):
         self._last_section = None # saving the last section to add it at the end
         self._body = None # the document body, where all the documents are appended
         self._body_copy = None # a deep copy of the original body without ending section
+        self._current_body = None # the current document body where all the changes are merged
         self._prepare_data(separator)
 
     def _prepare_data(self, separator):
@@ -434,23 +435,35 @@ class MergeDocument(object):
             r = etree.SubElement(self._separator, '{%(w)s}r'  % NAMESPACES)
             nbreak = etree.SubElement(r, '{%(w)s}br' % NAMESPACES)
             nbreak.set('{%(w)s}type' % NAMESPACES, sep_type)
-        
+    
+    def prepare(self, create_new_body=True, first=False):
+        """ prepares the current body for the merge """
+        if create_new_body:
+            assert self._current_body is None
+            # add separator if not the first document
+            if not first:
+                self._body.append(deepcopy(self._separator))
+            self._current_body = deepcopy(self._body_copy)
 
     def merge(self, merge_data, row, first=False):
-        # add separator if not the first document
-        if not first:
-            self._body.append(deepcopy(self._separator))
+        """ Merges one row into the current prepared body """
         
-        body = deepcopy(self._body_copy)
-        merge_data.replace(body, row)
-        for child in body:
-            self._body.append(child)
+        merge_data.replace(self._current_body, row)
+        return True
+    
+    def finish(self, create_new_body=True):
+        """ finishes the current body by saving it into the main body or into a file (future feature) """
+        if create_new_body and self._current_body is not None:
+            for child in self._current_body:
+                self._body.append(child)
+            self._current_body = None
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_type is None:
+            self.finish(True)
             self._body.append(self._last_section)
 
 class MailMerge(object):
@@ -670,8 +683,11 @@ class MailMerge(object):
                 continue
 
             with MergeDocument(root, separator) as merge_doc:
+                create_new_body = True
                 for i, row in enumerate(replacements):
-                    merge_doc.merge(self.merge_data, row, first=(i==0))
+                    merge_doc.prepare(create_new_body=create_new_body, first=(i==0))
+                    create_new_body = merge_doc.merge(self.merge_data, row)
+                    merge_doc.finish(create_new_body)
 
     def merge_pages(self, replacements):
          """
