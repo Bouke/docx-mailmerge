@@ -117,6 +117,8 @@ class MergeField(object):
 
     def _format_number(self, value, flag, option):
         format_match = re.match(NUMBERFORMAT_RE, option)
+        if value is None:
+            value = 0
         if format_match is None:
             warnings.warn("Non conforming number format <{}>".format(option))
             return value
@@ -148,13 +150,18 @@ class MergeField(object):
         len_decimals_plus_dot = 0 if not decimals else 1 + len(decimals)
         number_format_text = "{{}}{{:{zero_digits}{thousand_flag}{decimals}f}}{{}}".format(
             thousand_flag=thousand_flag,
-            zero_digits="0>{}".format(zero_digits + len_decimals_plus_dot) if zero_digits > 0 else "",
+            zero_digits="0>{}".format(zero_digits + len_decimals_plus_dot) if zero_digits > 1 else "",
             decimals=".{}".format(len(decimals)))
         # print(self.name, "<", option, ">", number_format_text)
-        return number_format_text.format(
-                    format_prefix,
-                    value,
-                    format_suffix)
+        try:
+            return number_format_text.format(
+                        format_prefix,
+                        value,
+                        format_suffix)
+        except Exception as e:
+            raise ValueError("Invalid number format <{}> with error <{}>".format(number_format_text, e))
+
+
 
     def _format_date(self, value, flag, option):
         warnings.warn("Date formatting not yet implemented <{}>".format(option))
