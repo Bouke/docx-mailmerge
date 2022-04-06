@@ -1,2 +1,6 @@
 /.tox/
 *.pyc
+*.egg-info
+dist
+*.code-workspace
+.DS_Store
