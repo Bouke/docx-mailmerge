@@ -1,6 +1,8 @@
 import zipfile
 import io
 import sys
+import tempfile
+from os import path
 
 from lxml import etree
 from mailmerge import MailMerge, NAMESPACES, CONTENT_TYPES_PARTS
@@ -37,6 +39,16 @@ class EtreeMixin(object):
             with open("real.xml", "wb") as f:
                 f.write(etree.tostring(rhs.getroottree().getroot(), encoding='UTF-8', pretty_print=True))
             raise
+    
+    def merge_templates(self, filename, replacements, separator='page_break', write_file=True, mm_args=[], mm_kwargs={}, mt_args=[], mt_kwargs={}):
+        with MailMerge(path.join(path.dirname(__file__), filename), *mm_args, **mm_kwargs) as document:
+            document.merge_templates(replacements, separator, *mt_args, **mt_kwargs)
+
+            if write_file:
+                with tempfile.TemporaryFile() as outfile:
+                    document.write(outfile)
+
+            return document, get_document_body_part(document).getroot()
 
     def open_docx(self, filename):
         self.docx_zipfile = zipfile.ZipFile(filename)

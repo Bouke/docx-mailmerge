@@ -10,6 +10,7 @@ from lxml import etree
 
 NAMESPACES = {
     'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+    'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
     'mc': 'http://schemas.openxmlformats.org/markup-compatibility/2006',
     'ct': 'http://schemas.openxmlformats.org/package/2006/content-types',
     'xml': 'http://www.w3.org/XML/1998/namespace'
