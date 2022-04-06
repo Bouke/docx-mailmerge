@@ -30,6 +30,10 @@ VALID_SEPARATORS = {
 
 NUMBERFORMAT_RE = r"([^0.,#PN]+)?(P\d+|N\d+|[0.,#]+%?)([^0.,#%].*)?"
 
+TAGS_WITH_ID = {
+    'wp:docPr': {'name': 'Picture {id}'}
+}
+
 MAKE_TESTS_HAPPY = True
 
 class MergeField(object):
@@ -239,8 +243,28 @@ class MergeData(object):
     def __init__(self, remove_empty_tables=False):
         self._merge_field_map = {} # merge_field.key: MergeField()
         self._merge_field_next_id = 0
+        self.duplicate_id_map = {} # tag: {'max': max_id, 'ids': set(existing_ids)}
         self.has_nested_fields = False
         self.remove_empty_tables = remove_empty_tables
+
+    def get_new_element_id(self, element):
+        """ Returns None if the existing id is new otherwise a new id """
+        tag = element.tag
+        id = element.get('id')
+        if id is None:
+            return None
+        id = int(id)
+        id_data = self.duplicate_id_map.setdefault(tag, {'max': id, 'values': set()})
+        if id in id_data['values']:
+            # it already exists
+            id = id_data['max'] + 1
+            id_data['values'].add(id)
+            id_data['max'] = id
+            return str(id)
+
+        id_data['values'].add(id)
+        id_data['max'] = max(id, id_data['max'])
+        return None
 
     def get_merge_fields(self, key):
         merge_obj = self.get_field_obj(key)
@@ -437,7 +461,7 @@ class MergeDocument(object):
             nbreak = etree.SubElement(r, '{%(w)s}br' % NAMESPACES)
             nbreak.set('{%(w)s}type' % NAMESPACES, sep_type)
     
-    def prepare(self, create_new_body=True, first=False):
+    def prepare(self, merge_data, create_new_body=True, first=False):
         """ prepares the current body for the merge """
         if create_new_body:
             assert self._current_body is None
@@ -445,16 +469,27 @@ class MergeDocument(object):
             if not first:
                 self._body.append(deepcopy(self._separator))
             self._current_body = deepcopy(self._body_copy)
+            for tag, attr_gen in TAGS_WITH_ID.items():
+                for elem in self._current_body.xpath('//{}'.format(tag), namespaces=NAMESPACES):
+                    self._fix_id(merge_data, elem, attr_gen)
 
     def merge(self, merge_data, row, first=False):
         """ Merges one row into the current prepared body """
         
         merge_data.replace(self._current_body, row)
         return True
-    
+
+    def _fix_id(self, merge_data, element, attr_gen):
+        new_id = merge_data.get_new_element_id(element)
+        if new_id is not None:
+            element.attrib['id'] = new_id
+            for attr_name, attr_value in attr_gen.items():
+                element.attrib[attr_name] = attr_value.format(id=new_id)
+
     def finish(self, create_new_body=True):
         """ finishes the current body by saving it into the main body or into a file (future feature) """
         if create_new_body and self._current_body is not None:
+
             for child in self._current_body:
                 self._body.append(child)
             self._current_body = None
@@ -686,7 +721,7 @@ class MailMerge(object):
             with MergeDocument(root, separator) as merge_doc:
                 create_new_body = True
                 for i, row in enumerate(replacements):
-                    merge_doc.prepare(create_new_body=create_new_body, first=(i==0))
+                    merge_doc.prepare(self.merge_data, create_new_body=create_new_body, first=(i==0))
                     create_new_body = merge_doc.merge(self.merge_data, row)
                     merge_doc.finish(create_new_body)
 
