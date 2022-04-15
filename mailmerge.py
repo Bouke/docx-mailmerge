@@ -1,6 +1,8 @@
 import warnings
 import shlex
 import re
+import datetime
+# import locale
 from zipfile import ZipFile, ZIP_DEFLATED
 from copy import deepcopy
 
@@ -29,6 +31,35 @@ VALID_SEPARATORS = {
     'continuous_section', 'evenPage_section', 'nextColumn_section', 'nextPage_section', 'oddPage_section'}
 
 NUMBERFORMAT_RE = r"([^0.,'#PN]+)?(P\d+|N\d+|[0.,'#]+%?)([^0.,'#%].*)?"
+DATEFORMAT_RE = "|".join([r"{}+".format(switch) for switch in "yYmMdDhHsS"] + [r"am/pm", r"AM/PM"])
+DATEFORMAT_MAP = {
+    "M": "{d.month}",
+    "MM": "%m",
+    "MMM": "%b",
+    "MMMM": "%B",
+    "d": "{d.day}",
+    "dd": "%d",
+    "ddd": "%a",
+    "dddd": "%A",
+    "D": "{d.day}",
+    "DD": "%d",
+    "DDD": "%a",
+    "DDDD": "%A",
+    "yy": "%y",
+    "yyyy": "%Y",
+    "YY": "%y",
+    "YYYY": "%Y",
+    "h": "{hour12}",
+    "hh": "%I",
+    "H": "{d.hour}",
+    "HH": "%H",
+    "m": "{d.minute}",
+    "mm": "%M",
+    "s": "{d.second}",
+    "ss": "%S",
+    "am/pm": "%p",
+    "AM/PM": "%p",
+}
 
 TAGS_WITH_ID = {
     'wp:docPr': {'name': 'Picture {id}'}
@@ -82,6 +113,9 @@ class MergeField(object):
         options = self.instr_tokens[2:]
         while options:
             flag = options[0][0:2]
+            if not flag:
+                options = options[1:]
+                continue
             if options[0][2:]: # no space after the flag
                 option = options[0][2:]
                 options = options[1:]
@@ -117,6 +151,15 @@ class MergeField(object):
             return str(value).upper()
         if option == 'lower':
             return str(value).lower()
+
+        if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+            # TODO format the date according to the locale -- set the locale
+            date_formats = []
+            if hasattr(value, 'month'):
+                date_formats.append('%x')
+            if hasattr(value, 'hour'):
+                date_formats.append('%X')
+            value = value.strftime(" ".join(date_formats))
 
         return value
 
@@ -173,10 +216,20 @@ class MergeField(object):
         except Exception as e:
             raise ValueError("Invalid number format <{}> with error <{}>".format(number_format_text, e))
 
-
-
     def _format_date(self, value, flag, option):
-        warnings.warn("Date formatting not yet implemented <{}>".format(option))
+        if not isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+            return str(value)
+
+        # set the locale to be used for time
+        # more checking needed before activating
+        # locale.setlocale(locale.LC_TIME, "")
+        fmt = re.sub(DATEFORMAT_RE, lambda x:DATEFORMAT_MAP[x[0]], option)
+        fmt_args = {'d': value}
+        if hasattr(value, 'hour'):
+            fmt_args['hour12'] = value.hour % 12
+        fmt = fmt.format(**fmt_args)
+        value = value.strftime(fmt)
+        # warnings.warn("Date formatting not yet implemented <{}>".format(option))
         return value
 
     def fill_data(self, merge_data, row):
@@ -186,6 +239,7 @@ class MergeField(object):
             value = self._format(value)
         except Exception as e:
             warnings.warn("Invalid formatting for field <{}> with error <{}>".format(self.instr, e))
+            # raise
 
         self.filled_value = value
 
