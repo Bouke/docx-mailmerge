@@ -40,13 +40,17 @@ class EtreeMixin(object):
                 f.write(etree.tostring(rhs.getroottree().getroot(), encoding='UTF-8', pretty_print=True))
             raise
     
-    def merge_templates(self, filename, replacements, separator='page_break', write_file=True, mm_args=[], mm_kwargs={}, mt_args=[], mt_kwargs={}):
+    def merge_templates(self, filename, replacements, separator='page_break', write_file=True, mm_args=[], mm_kwargs={}, mt_args=[], mt_kwargs={}, output=None):
         with MailMerge(path.join(path.dirname(__file__), filename), *mm_args, **mm_kwargs) as document:
             document.merge_templates(replacements, separator, *mt_args, **mt_kwargs)
 
             if write_file:
-                with tempfile.TemporaryFile() as outfile:
-                    document.write(outfile)
+                if output:
+                    with open(output, 'wb') as outfile:
+                        document.write(outfile)
+                else:
+                    with tempfile.TemporaryFile() as outfile:
+                        document.write(outfile)
 
             return document, get_document_body_part(document).getroot()
 
