@@ -28,7 +28,7 @@ VALID_SEPARATORS = {
     'page_break', 'column_break', 'textWrapping_break',
     'continuous_section', 'evenPage_section', 'nextColumn_section', 'nextPage_section', 'oddPage_section'}
 
-NUMBERFORMAT_RE = r"([^0.,#PN]+)?(P\d+|N\d+|[0.,#]+%?)([^0.,#%].*)?"
+NUMBERFORMAT_RE = r"([^0.,'#PN]+)?(P\d+|N\d+|[0.,'#]+%?)([^0.,'#%].*)?"
 
 TAGS_WITH_ID = {
     'wp:docPr': {'name': 'Picture {id}'}
@@ -147,7 +147,11 @@ class MergeField(object):
                     format_prefix,
                     value,
                     format_suffix)
-        thousand_flag = "," if ',' in format_number else ''
+        thousand_info = [
+            ('_', thousand_char)
+            for thousand_char in "',"
+            if thousand_char in format_number] + [('', '')]
+        thousand_flag, thousand_char = thousand_info[0]
         format_number = format_number.replace(',', '')
         digits, decimals = (format_number.split('.') + [''])[0:2]
         zero_digits = len(digits.replace('#', ''))
@@ -159,10 +163,13 @@ class MergeField(object):
             decimals=".{}".format(len(decimals)))
         # print(self.name, "<", option, ">", number_format_text)
         try:
-            return number_format_text.format(
+            result = number_format_text.format(
                         format_prefix,
                         value,
                         format_suffix)
+            if thousand_flag:
+                result = result.replace(thousand_flag, thousand_char)
+            return result
         except Exception as e:
             raise ValueError("Invalid number format <{}> with error <{}>".format(number_format_text, e))
 

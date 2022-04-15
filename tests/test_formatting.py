@@ -1,6 +1,7 @@
 import unittest
 import tempfile
 import warnings
+import datetime
 from os import path
 from lxml import etree
 
@@ -52,6 +53,10 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
                     (0, "0.00"),
                     (23423, "23,423.00")
                 ],
+                "#'###.##": [
+                    (0, "0.00"),
+                    (23423, "23'423.00")
+                ],
                 "#,##0.00": [
                     (0, "0.00"),
                     (23423, "23,423.00")
@@ -71,15 +76,62 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
                     (0, "0%"),
                     (0.034512314, "3%")
                     ],
+                # "#.##": [
+                #     (0.25, ".25"),
+                #     (5, "5."),
+                #     ],
             })
 
     def test_date(self):
-        self._test_formats(
-            '\\@', 
-            {  
-                
-            }
-        )
+        datetime_value = datetime.datetime(2022, 4, 12, 15, 10, 59)
+        date_value = datetime_value.date()
+        time_value = datetime_value.time()
+        return
+        # test date values
+        for value in [datetime_value, date_value]:
+            self._test_formats(
+                '\\@', 
+                {  
+                    'M': [(value, '')],
+                    'MM': [(value, '')],
+                    'MMM': [(value, '')],
+                    'MMMM': [(value, '')],
+                    'd': [(value, '')],
+                    'dd': [(value, '')],
+                    'ddd': [(value, '')],
+                    'dddd': [(value, '')],
+                    'D': [(value, '')],
+                    'DD': [(value, '')],
+                    'DDD': [(value, '')],
+                    'DDDD': [(value, '')],
+                    'yy': [(value, '')],
+                    'yyyy': [(value, '')],
+                    'YY': [(value, '')],
+                    'YYYY': [(value, '')],
+                }
+            )
+
+        # test time values
+        for value in [datetime_value, time_value]:
+            self._test_formats(
+                '\\@', 
+                {  
+                    'h': [(value, '')],
+                    'hh': [(value, '')],
+                    'H': [(value, '')],
+                    'HH': [(value, '')],
+                    'm': [(value, '')],
+                    'mm': [(value, '')],
+                    's': [(value, '')],
+                    'ss': [(value, '')],
+                    'am/pm': [(value, '')],
+                    'AM/PM': [(value, '')],
+                }
+            )
+        
+        # special cases
+        # TODO add empty value, null value, string value
+        # TODO also add datetime/date/time values with no format with different locales
 
     def test_text(self):
         self._test_formats(
