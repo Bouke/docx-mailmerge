@@ -1,7 +1,7 @@
 from setuptools import setup
 
-setup(name='docx-mailmerge',
-      version='0.5.0',
+setup(name='docx-mailmerge2',
+      version='0.6.1',
       description='Performs a Mail Merge on docx (Microsoft Office Word) files',
       long_description=open('README.rst').read(),
       classifiers=[
@@ -12,9 +12,9 @@ setup(name='docx-mailmerge',
           'Programming Language :: Python :: 3.7',
           'Topic :: Text Processing',
       ],
-      author='Bouke Haarsma',
-      author_email='bouke@haarsma.eu',
-      url='http://github.com/Bouke/docx-mailmerge',
+      author='Iulian Ciorăscu',
+      author_email='ciulian@gmail.com',
+      url='http://github.com/iulica/docx-mailmerge',
       license='MIT',
       py_modules=['mailmerge'],
       zip_safe=False,
