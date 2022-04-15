@@ -94,6 +94,10 @@ pictures in the docx {INCLUDEPICTURE} or for conditional texts {IF}
 ::
 
     { INCLUDEPICTURE "{ MERGEFIELD path }/{ MERGEFIELD image }" }
+    { IF "{ MERGEFIELD reason }" <> "" "Reason: { MERGEFIELD reason }" }
+
+Always enclose the fields with double quotes, as the MERGE fields will be first
+filled in with data and then the other fields will be computed through Word.
 
 If the fields are nested inside other fields, the outer fields need to be
 updated in Word. This can be done by selecting everything (CTRL-a) and then
