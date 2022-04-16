@@ -67,6 +67,12 @@ TAGS_WITH_ID = {
 
 MAKE_TESTS_HAPPY = True
 
+class NextRecord(Exception):
+    pass
+
+class SkipRecord(Exception):
+    pass
+
 class MergeField(object):
     """
     Base MergeField class
@@ -74,7 +80,7 @@ class MergeField(object):
     it contains the field name, and a method to return a list of elements (runs) given the data dictionary 
     """
 
-    def __init__(self, parent, name=None, key=None, instr=None, instr_tokens=None, nested=False, elements=None, ignore_elements=None):
+    def __init__(self, parent, name="", key=None, instr=None, instr_tokens=None, nested=False, elements=None, ignore_elements=None):
         """ Inits the MergeField class
         
         Args:
@@ -92,7 +98,9 @@ class MergeField(object):
         self.instr_tokens = instr_tokens
         self.filled_elements = []
         self.filled_value = None
-        self.name = name or instr_tokens[1]
+        self.name = name
+        if not name and instr_tokens[1:]:
+            self.name = instr_tokens[1]
 
         self._parse_instruction()
 
@@ -297,6 +305,10 @@ class MergeField(object):
         self.parent.replace(self._elements_to_add[0], replacement_element)
         return replacement_element
 
+class NextField(MergeField):
+
+    def fill_data(self, merge_data, row):
+        raise NextRecord()
 
 class MergeData(object):
 
@@ -304,6 +316,7 @@ class MergeData(object):
 
     FIELD_CLASSES = {
         "MERGEFIELD": MergeField,
+        "NEXT": NextField,
     }
 
     def __init__(self, remove_empty_tables=False):
@@ -312,7 +325,28 @@ class MergeData(object):
         self.duplicate_id_map = {} # tag: {'max': max_id, 'ids': set(existing_ids)}
         self.has_nested_fields = False
         self.remove_empty_tables = remove_empty_tables
+        self._rows = None
+        self._current_index = None
 
+    def start_merge(self, replacements):
+        assert self._rows is None, "merge already started"
+        self._rows = replacements
+        return self.next_row()
+    
+    def next_row(self):
+        assert self._rows is not None, "merge not yet started"
+
+        if self._current_index is None:
+            self._current_index = 0
+        else:
+            self._current_index += 1
+        
+        if self._current_index < len(self._rows):
+            return self._rows[self._current_index]
+    
+    def is_first(self):
+        return self._current_index == 0
+    
     def get_new_element_id(self, element):
         """ Returns None if the existing id is new otherwise a new id """
         tag = element.tag
@@ -420,11 +454,17 @@ class MergeData(object):
 
         merge_fields = body.findall('.//MergeField')
         for field_element in merge_fields:
-            filled_field = self.fill_field(field_element, row)
-            if filled_field:
-                for text_element in reversed(filled_field.filled_elements):
-                    field_element.addnext(text_element)
+            try:
+                filled_field = self.fill_field(field_element, row)
+                if filled_field:
+                    for text_element in reversed(filled_field.filled_elements):
+                        field_element.addnext(text_element)
+                    field_element.getparent().remove(field_element)
+            except NextRecord:
                 field_element.getparent().remove(field_element)
+                row = self.next_row()
+                if row is None:
+                    return                
     
     def replace_table_rows(self, body, anchor, rows):
         """ replace the rows of a table with the values from the rows list """
@@ -452,7 +492,7 @@ class MergeData(object):
     
     def fill_field(self, field_element, row):
         """" fills the corresponding MergeField python object with data from row """
-        if field_element.get('name') not in row:
+        if field_element.get('name') and field_element.get('name') not in row:
             return None
         field_key = field_element.get('merge_key')
         field_obj = self._merge_field_map[field_key]
@@ -527,23 +567,21 @@ class MergeDocument(object):
             nbreak = etree.SubElement(r, '{%(w)s}br' % NAMESPACES)
             nbreak.set('{%(w)s}type' % NAMESPACES, sep_type)
     
-    def prepare(self, merge_data, create_new_body=True, first=False):
+    def prepare(self, merge_data, first=False):
         """ prepares the current body for the merge """
-        if create_new_body:
-            assert self._current_body is None
-            # add separator if not the first document
-            if not first:
-                self._body.append(deepcopy(self._separator))
-            self._current_body = deepcopy(self._body_copy)
-            for tag, attr_gen in TAGS_WITH_ID.items():
-                for elem in self._current_body.xpath('//{}'.format(tag), namespaces=NAMESPACES):
-                    self._fix_id(merge_data, elem, attr_gen)
+        assert self._current_body is None
+        # add separator if not the first document
+        if not first:
+            self._body.append(deepcopy(self._separator))
+        self._current_body = deepcopy(self._body_copy)
+        for tag, attr_gen in TAGS_WITH_ID.items():
+            for elem in self._current_body.xpath('//{}'.format(tag), namespaces=NAMESPACES):
+                self._fix_id(merge_data, elem, attr_gen)
 
     def merge(self, merge_data, row, first=False):
         """ Merges one row into the current prepared body """
         
         merge_data.replace(self._current_body, row)
-        return True
 
     def _fix_id(self, merge_data, element, attr_gen):
         new_id = merge_data.get_new_element_id(element)
@@ -552,10 +590,13 @@ class MergeDocument(object):
             for attr_name, attr_value in attr_gen.items():
                 element.attrib[attr_name] = attr_value.format(id=new_id)
 
-    def finish(self, create_new_body=True):
+    def finish(self, abort=False):
         """ finishes the current body by saving it into the main body or into a file (future feature) """
-        if create_new_body and self._current_body is not None:
 
+        if abort: # for skipping the record
+            self._current_body = None
+
+        if self._current_body is not None:
             for child in self._current_body:
                 self._body.append(child)
             self._current_body = None
@@ -785,11 +826,15 @@ class MailMerge(object):
                 continue
 
             with MergeDocument(root, separator) as merge_doc:
-                create_new_body = True
-                for i, row in enumerate(replacements):
-                    merge_doc.prepare(self.merge_data, create_new_body=create_new_body, first=(i==0))
-                    create_new_body = merge_doc.merge(self.merge_data, row)
-                    merge_doc.finish(create_new_body)
+                row = self.merge_data.start_merge(replacements)
+                while row is not None:
+                    merge_doc.prepare(self.merge_data, first=self.merge_data.is_first())
+                    try:
+                        merge_doc.merge(self.merge_data, row)
+                        merge_doc.finish()
+                    except SkipRecord:
+                        merge_doc.finish(abort=True)
+                    row = self.merge_data.next_row()
 
     def merge_pages(self, replacements):
          """
