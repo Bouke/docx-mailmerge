@@ -129,6 +129,8 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
                     'yyyy': [(value, '2022')],
                     'YY': [(value, '22')],
                     'YYYY': [(value, '2022')],
+                    # combined
+                    'YYYYMMDD': [(value, '20220309')]
                 }
             )
 
@@ -150,8 +152,8 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
                 }
             )
 
-        self._test_formats('', {'': [(datetime_value, '2022-03-09 17:07:08')]})
-        self._test_formats('', {'': [(date_value, '2022-03-09')]})
+        self._test_formats('', {'': [(datetime_value, '03/09/2022 17:07:08')]})
+        self._test_formats('', {'': [(date_value, '03/09/2022')]})
         self._test_formats('', {'': [(time_value, '17:07:08')]})
 
         locale.setlocale(locale.LC_TIME, 'de_DE')
@@ -163,12 +165,19 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
             }
         )
 
-        self._test_formats('', {'': [(datetime_value, '2022-03-09 17:07:08')]})
-        self._test_formats('', {'': [(date_value, '2022-03-09')]})
+        self._test_formats('', {'': [(datetime_value, '09.03.2022 17:07:08')]})
+        self._test_formats('', {'': [(date_value, '09.03.2022')]})
         self._test_formats('', {'': [(time_value, '17:07:08')]})
 
         # special cases
         # TODO add empty value, null value, string value
+        self._test_formats(
+            '\\@',
+            {
+                'MMM': [(None, '')],
+                'am/pm': [('2022-03-09', '2022-03-09')],
+            }
+        )
         # TODO also add datetime/date/time values with no format with different locales
 
 

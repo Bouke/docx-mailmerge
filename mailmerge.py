@@ -130,6 +130,16 @@ class MergeField(object):
                 value = self._format_date(value, flag, option)
             if flag in ('\\*'):
                 value = self._format_text(value, flag, option)
+
+        if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
+            # TODO format the date according to the locale -- set the locale
+            date_formats = []
+            if hasattr(value, 'month'):
+                date_formats.append('%x')
+            if hasattr(value, 'hour'):
+                date_formats.append('%X')
+            value = value.strftime(" ".join(date_formats))
+
         return value
 
     def _format_bf(self, value, flag, option):
@@ -151,15 +161,6 @@ class MergeField(object):
             return str(value).upper()
         if option == 'lower':
             return str(value).lower()
-
-        if isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
-            # TODO format the date according to the locale -- set the locale
-            date_formats = []
-            if hasattr(value, 'month'):
-                date_formats.append('%x')
-            if hasattr(value, 'hour'):
-                date_formats.append('%X')
-            value = value.strftime(" ".join(date_formats))
 
         return value
 
@@ -217,6 +218,10 @@ class MergeField(object):
             raise ValueError("Invalid number format <{}> with error <{}>".format(number_format_text, e))
 
     def _format_date(self, value, flag, option):
+
+        if value is None:
+            return ''
+
         if not isinstance(value, (datetime.datetime, datetime.date, datetime.time)):
             return str(value)
 

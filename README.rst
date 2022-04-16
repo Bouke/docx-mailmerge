@@ -86,9 +86,19 @@ documents.
     ], separator='page_break')
 
 
-Starting in version 0.6.0 the fields formatting is respected when compatible
-Numeric, Text, Conditional fields are already implemented. Date formatting 
-is work in progress.
+Starting in version 0.6.0 the fields formatting is respected when compatible.
+Numeric, Text, Conditional and Date fields (0.6.2) are implemented.
+For Date fields a compatible datetime, date or time objects must be provided.
+If locale support is needed, make sure to call the setlocale before merging
+::
+
+    import locale
+    locale.setlocale(locale.LC_TIME, '') # for system locale
+
+    document.merge_templates([
+        {'datefield': datetime.date('2022-04-15')},
+    ], separator='page_break')
+
 You can also use the merge fields inside other fields, for example to insert
 pictures in the docx {INCLUDEPICTURE} or for conditional texts {IF}
 ::
@@ -122,7 +132,6 @@ with Python`_ on Practical Business Python for more information and examples.
 Todo / Wish List
 ================
 
-* Date formatting
 * Update fields instead of replacing them, so future merges will also work as an "update"
 * Create single word documents for each row of data
 * Implement NEXT and NEXTIF records
