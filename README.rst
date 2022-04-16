@@ -2,17 +2,19 @@
 docx Mail Merge
 ===============
 
-.. image:: https://travis-ci.org/Bouke/docx-mailmerge.png?branch=master
-    :alt: Build Status
-    :target: https://travis-ci.org/Bouke/docx-mailmerge
-
-.. image:: https://badge.fury.io/py/docx-mailmerge.png
-    :alt: PyPI
-    :target: https://pypi.python.org/pypi/docx-mailmerge
-
 Performs a Mail Merge on Office Open XML (docx) files. Can be used on any
 system without having to install Microsoft Office Word. Supports Python 2.7,
 3.3 and up.
+
+Project Status
+==============
+
+I wrote the library some years ago to scratch an itch I was having. The itch
+is long gone and therefore the need to keep this library maintained. Over
+years I’ve merged some PRs, but my interest in maintaining this library has
+faded. I have decided to archive this repository. There is a community
+effort to continue work on this codebase, which can be found here:
+https://pypi.org/project/docx-mailmerge2/.
 
 Installation
 ============
