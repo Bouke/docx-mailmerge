@@ -463,8 +463,6 @@ class MergeData(object):
             except NextRecord:
                 field_element.getparent().remove(field_element)
                 row = self.next_row()
-                if row is None:
-                    return                
     
     def replace_table_rows(self, body, anchor, rows):
         """ replace the rows of a table with the values from the rows list """
@@ -492,7 +490,7 @@ class MergeData(object):
     
     def fill_field(self, field_element, row):
         """" fills the corresponding MergeField python object with data from row """
-        if field_element.get('name') and field_element.get('name') not in row:
+        if field_element.get('name') and (row is None or field_element.get('name') not in row):
             return None
         field_key = field_element.get('merge_key')
         field_obj = self._merge_field_map[field_key]

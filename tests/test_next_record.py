@@ -24,10 +24,11 @@ class NextRecordsTest(EtreeMixin, unittest.TestCase):
             # output="tests/test_output_next_record.docx"
             )
         
+        self.assertFalse(root_elem.xpath("//MergeField", namespaces=NAMESPACES))
         fields = root_elem.xpath("//w:t/text()", namespaces=NAMESPACES)
         expected = [
             v
-            for value in values + ['']
+            for value in values + ['']*3
             for v in [value, '/', value]
         ]
         self.assertListEqual(fields, expected)
