@@ -272,29 +272,51 @@ class MailMerge(object):
             mf.tag = '{%(w)s}r' % NAMESPACES
             mf.extend(children)
 
-            nodes = []
             # preserve new lines in replacement text
             text = text or ''  # text might be None
             text_parts = str(text).replace('\r', '').split('\n')
-            for i, text_part in enumerate(text_parts):
-                text_node = Element('{%(w)s}t' % NAMESPACES)
-                text_node.text = text_part
-                nodes.append(text_node)
 
-                # if not last node add new line node
-                if i < (len(text_parts) - 1):
-                    nodes.append(Element('{%(w)s}br' % NAMESPACES))
+            # step1 insert the first line
+            text_node = etree.Element('{%(w)s}t' % NAMESPACES)
+            text_node.text = text_parts[0]
 
             ph = mf.find('MergeText')
             if ph is not None:
                 # add text nodes at the exact position where
                 # MergeText was found
                 index = mf.index(ph)
-                for node in reversed(nodes):
-                    mf.insert(index, node)
+                mf.insert(index, text_node)
                 mf.remove(ph)
             else:
-                mf.extend(nodes)
+                mf.extend(text_node)
+            
+            current_paragraph = mf.getparent()
+            
+            # step2 insert each remaining line as different paragraph
+            # with the style of the same merge field
+            if(len(text_parts)>1):
+                # get the style of current merge field 
+                # contain paragraph and text
+                # <w:pPr>**</w:pRr>
+                current_paragraph_style = current_paragraph[0]
+                # <w:rPr>**</w:rRr>
+                current_text_style = mf[0]   
+                current_body = current_paragraph.getparent()
+                # find the next insert place
+                insert_index = current_body.index(current_paragraph)+1
+                for k in range(1,len(text_parts)):
+                    paragraph_node = etree.Element('{%(w)s}p' % NAMESPACES)
+                    # copy paragraph style
+                    paragraph_node.append(deepcopy(current_paragraph_style))
+                    # copy text style
+                    text_node = etree.SubElement(paragraph_node,'{%(w)s}r' % NAMESPACES)
+                    text_node.append(deepcopy(current_text_style))
+                    # insert text
+                    etree.SubElement(text_node,'{%(w)s}t' % NAMESPACES).text = text_parts[k]
+                    # insert new paragraph
+                    current_body.insert(insert_index,paragraph_node)
+                    # find the next insert place
+                    insert_index = insert_index + 1
 
     def merge_rows(self, anchor, rows):
         table, idx, template = self.__find_row_anchor(anchor)
