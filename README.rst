@@ -134,7 +134,7 @@ Todo / Wish List
 
 * Update fields instead of replacing them, so future merges will also work as an "update"
 * Create single word documents for each row of data
-* Implement NEXT and NEXTIF records
+* Implement SKIPIF and NEXTIF fields
 
 Contributing
 ============
