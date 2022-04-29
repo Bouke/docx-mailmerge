@@ -123,7 +123,7 @@ class MailMerge(object):
         zi = self.zip.getinfo(fn)
         return zi, etree.parse(self.zip.open(zi))
 
-    def write(self, file):
+    def write(self, file, encoding=None):
         # Replace all remaining merge fields with empty values
         for field in self.get_merge_fields():
             self.merge(**{field: ''})
@@ -131,10 +131,10 @@ class MailMerge(object):
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
                 if zi in self.parts:
-                    xml = etree.tostring(self.parts[zi].getroot())
+                    xml = etree.tostring(self.parts[zi].getroot(), encoding=encoding)
                     output.writestr(zi.filename, xml)
                 elif zi == self._settings_info:
-                    xml = etree.tostring(self.settings.getroot())
+                    xml = etree.tostring(self.settings.getroot(), encoding=encoding)
                     output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
