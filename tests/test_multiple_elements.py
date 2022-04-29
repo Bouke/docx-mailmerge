@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 from os import path
-from lxml import etree
+from xml.etree import ElementTree as ET
 
 from mailmerge import MailMerge
 from tests.utils import EtreeMixin
@@ -18,7 +18,7 @@ class MultipleElementsTest(EtreeMixin, unittest.TestCase):
             with tempfile.TemporaryFile() as outfile:
                 document.write(outfile)
 
-            expected_tree = etree.fromstring(
+            expected_tree = ET.fromstring(
                 '<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" '
                 'xmlns:mo="http://schemas.microsoft.com/office/mac/office/2008/main" '
                 'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" '
