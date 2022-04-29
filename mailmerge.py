@@ -28,6 +28,7 @@ class MailMerge(object):
         self.settings = None
         self._settings_info = None
         self.remove_empty_tables = remove_empty_tables
+        self.parser = etree.XMLParser(recover=True)
 
         try:
             content_types = etree.parse(self.zip.open('[Content_Types].xml'))
@@ -121,7 +122,7 @@ class MailMerge(object):
     def __get_tree_of_file(self, file):
         fn = file.attrib['PartName' % NAMESPACES].split('/', 1)[1]
         zi = self.zip.getinfo(fn)
-        return zi, etree.parse(self.zip.open(zi))
+        return zi, etree.parse(self.zip.open(zi), parser=self.parser)
 
     def write(self, file):
         # Replace all remaining merge fields with empty values
@@ -131,10 +132,10 @@ class MailMerge(object):
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
                 if zi in self.parts:
-                    xml = etree.tostring(self.parts[zi].getroot())
+                    xml = etree.tostring(self.parts[zi].getroot(), encoding='utf-8', xml_declaration=True)
                     output.writestr(zi.filename, xml)
                 elif zi == self._settings_info:
-                    xml = etree.tostring(self.settings.getroot())
+                    xml = etree.tostring(self.settings.getroot(), encoding='utf-8', xml_declaration=True)
                     output.writestr(zi.filename, xml)
                 else:
                     output.writestr(zi.filename, self.zip.read(zi))
@@ -273,8 +274,8 @@ class MailMerge(object):
             mf.extend(children)
 
             nodes = []
+            text = '' if text is None else str(text)
             # preserve new lines in replacement text
-            text = text or ''  # text might be None
             text_parts = str(text).replace('\r', '').split('\n')
             for i, text_part in enumerate(text_parts):
                 text_node = Element('{%(w)s}t' % NAMESPACES)
