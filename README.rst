@@ -35,7 +35,7 @@ Open the file.
 List all merge fields.
 ::
 
-    print document.get_merge_fields()
+    print(document.get_merge_fields())
 
 
 Merge fields, supplied as kwargs.
