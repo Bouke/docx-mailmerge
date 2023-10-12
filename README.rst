@@ -99,6 +99,8 @@ If locale support is needed, make sure to call the setlocale before merging
         {'datefield': datetime.date('2022-04-15')},
     ], separator='page_break')
 
+The {NEXT} fields are supported (0.6.3).
+
 You can also use the merge fields inside other fields, for example to insert
 pictures in the docx {INCLUDEPICTURE} or for conditional texts {IF}
 ::
