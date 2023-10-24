@@ -18,20 +18,25 @@ NAMESPACES = {
     'xml': 'http://www.w3.org/XML/1998/namespace'
 }
 
-HEADER_FOOTER_TAGS = {
-    '{%(w)s}hdr' % NAMESPACES,
-    '{%(w)s}ftr' % NAMESPACES
-}
+ATTACHMENT_TAGS = [
+    'hdr', # header
+    'ftr', # footer
+    'footnotes', # footnotes
+    'endnotes', # endnotes
+]
 
-FOOTNOTES_TAGS = {
-    '{%(w)s}footnotes' % NAMESPACES
+ATTACHMENT_TAGS_WITH_NAMESPACE = {
+    '{%(w)s}' % NAMESPACES + tag
+    for tag in ATTACHMENT_TAGS
 }
 
 CONTENT_TYPES_PARTS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
+    'application/vnd.ms-word.document.macroEnabled.main+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml',
 )
 
 CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'
@@ -633,8 +638,6 @@ class MailMerge(object):
     Those MergeElement elements will then be replaced for each run with a list of elements containing run elements with texts.
     The MergeElement value (list of run Elements) should be computed recursively for the inner MergeElements
 
-    The IF MergeElement has the condition MergeCondition, and two lists of elements, one for true and one for false
-
     """
 
     def __init__(self, file, remove_empty_tables=False, auto_update_fields_on_open="no"):
@@ -829,8 +832,8 @@ class MailMerge(object):
             root = part.getroot()
             tag = root.tag
 
-            # ignore header and footer ?
-            if tag in HEADER_FOOTER_TAGS or tag in FOOTNOTES_TAGS:
+            # ignore header, footer, footnotes, endnotes, etc
+            if tag in ATTACHMENT_TAGS_WITH_NAMESPACE:
                 continue
 
             with MergeDocument(root, separator) as merge_doc:
