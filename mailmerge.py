@@ -18,10 +18,20 @@ NAMESPACES = {
     'xml': 'http://www.w3.org/XML/1998/namespace'
 }
 
+HEADER_FOOTER_TAGS = {
+    '{%(w)s}hdr' % NAMESPACES,
+    '{%(w)s}ftr' % NAMESPACES
+}
+
+FOOTNOTES_TAGS = {
+    '{%(w)s}footnotes' % NAMESPACES
+}
+
 CONTENT_TYPES_PARTS = (
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
 )
 
 CONTENT_TYPE_SETTINGS = 'application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml'
@@ -820,7 +830,7 @@ class MailMerge(object):
             tag = root.tag
 
             # ignore header and footer ?
-            if tag == '{%(w)s}ftr' % NAMESPACES or tag == '{%(w)s}hdr' % NAMESPACES:
+            if tag in HEADER_FOOTER_TAGS or tag in FOOTNOTES_TAGS:
                 continue
 
             with MergeDocument(root, separator) as merge_doc:

@@ -54,6 +54,20 @@ class EtreeMixin(object):
 
             return document, get_document_body_part(document).getroot()
 
+    def merge(self, filename, replacements, write_file=True, mm_args=[], mm_kwargs={}, output=None):
+        with MailMerge(path.join(path.dirname(__file__), filename), *mm_args, **mm_kwargs) as document:
+            document.merge(**replacements)
+
+            if write_file:
+                if output:
+                    with open(output, 'wb') as outfile:
+                        document.write(outfile)
+                else:
+                    with tempfile.TemporaryFile() as outfile:
+                        document.write(outfile)
+
+            return document, get_document_body_part(document).getroot()
+
     def open_docx(self, filename):
         self.docx_zipfile = zipfile.ZipFile(filename)
         self.docx_parts = {}
@@ -84,9 +98,9 @@ class EtreeMixin(object):
         return zip_buffer
 
 
-def get_document_body_part(document):
+def get_document_body_part(document, endswith="document"):
     for part in document.parts.values():
-        if part.getroot().tag.endswith('}document'):
+        if part.getroot().tag.endswith('}%s' % endswith):
             return part
 
     raise AssertionError("main document body not found in document.parts")
