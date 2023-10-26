@@ -6,6 +6,9 @@ from lxml import etree
 from mailmerge import MailMerge, NAMESPACES
 from tests.utils import EtreeMixin, get_document_body_part
 
+UPDATE_FIELDS_TRUE_XPATH = './w:updateFields[@w:val="true"]'
+UPDATE_FIELDS_XPATH = './w:updateFields/@w:val'
+
 class NestedFieldsTest(EtreeMixin, unittest.TestCase):
     """
     Testing multiple complex fields begin-end, nested or not
@@ -34,35 +37,36 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
         """
         Fields are disjoint, no interference between the two complex fields
         """
-        with MailMerge(path.join(path.dirname(__file__), 'test_nested_if_outside.docx')) as document:
-            self.assertEqual(document.get_merge_fields(),
-                             set(['fieldname']))
+        values = {"fieldname":"one"}
+        document, root_elem = self.merge(
+            'test_nested_if_outside.docx',
+            values,
+            mm_kwargs={},
+            # output="tests/output/test_output_nested_if_outside.docx"
+            )
+        self.assertListEqual(
+            document.settings.getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            [])
 
-            document.merge(fieldname="one")
-            # since the fields are disjoint, no auto update is necessary
-            self.assertListEqual(
-                document.settings.getroot().xpath('./w:updateFields[@w:val="true"]', namespaces=NAMESPACES),
-                [])
+        document, root_elem = self.merge(
+            'test_nested_if_outside.docx',
+            values,
+            mm_kwargs=dict(auto_update_fields_on_open="auto"),
+            # output="tests/output/test_output_nested_if_outside.docx"
+            )
+        self.assertListEqual(
+            document.settings.getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            [])
 
-        with MailMerge(path.join(path.dirname(__file__), 'test_nested_if_outside.docx'), auto_update_fields_on_open="auto") as document:
-            self.assertEqual(document.get_merge_fields(),
-                             set(['fieldname']))
-
-            document.merge(fieldname="one")
-            # since the fields are disjoint, no auto update is necessary
-            self.assertListEqual(
-                document.settings.getroot().xpath('./w:updateFields[@w:val="true"]', namespaces=NAMESPACES),
-                [])
-
-        with MailMerge(path.join(path.dirname(__file__), 'test_nested_if_outside.docx'), auto_update_fields_on_open="always") as document:
-            self.assertEqual(document.get_merge_fields(),
-                             set(['fieldname']))
-
-            document.merge(fieldname="one")
-            # forced update Fields
-            self.assertListEqual(
-                document.settings.getroot().xpath('./w:updateFields/@w:val', namespaces=NAMESPACES),
-                ["true"])
+        document, root_elem = self.merge(
+            'test_nested_if_outside.docx',
+            values,
+            mm_kwargs=dict(auto_update_fields_on_open="always"),
+            # output="tests/output/test_output_nested_if_outside.docx"
+            )
+        self.assertListEqual(
+            document.settings.getroot().xpath(UPDATE_FIELDS_XPATH, namespaces=NAMESPACES),
+            ["true"])
 
     def test_field_inside(self):
         """
@@ -111,22 +115,23 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
         """
         Fields are nested, auto update fields
         """
-        with MailMerge(path.join(path.dirname(__file__), 'test_nested_if_inside.docx')) as document:
-            self.assertEqual(document.get_merge_fields(),
-                             set(['fieldname']))
+        values = {"fieldname":"one"}
+        document, root_elem = self.merge(
+            'test_nested_if_inside.docx',
+            values,
+            mm_kwargs={},
+            # output="tests/output/test_output_nested_if_inside.docx"
+            )
+        self.assertListEqual(
+            document.settings.getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            [])
 
-            document.merge(fieldname="one")
-            # default auto_update_fields_on_open="no"
-            self.assertListEqual(
-                document.settings.getroot().xpath('./w:updateFields[@w:val="true"]', namespaces=NAMESPACES),
-                [])
-
-        with MailMerge(path.join(path.dirname(__file__), 'test_nested_if_inside.docx'), auto_update_fields_on_open="auto") as document:
-            self.assertEqual(document.get_merge_fields(),
-                             set(['fieldname']))
-
-            document.merge(fieldname="one")
-            # nested fields - auto update
-            self.assertListEqual(
-                document.settings.getroot().xpath('./w:updateFields/@w:val', namespaces=NAMESPACES),
-                ["true"])
+        document, root_elem = self.merge(
+            'test_nested_if_inside.docx',
+            values,
+            mm_kwargs=dict(auto_update_fields_on_open="auto"),
+            # output="tests/output/test_output_nested_if_inside.docx"
+            )
+        self.assertListEqual(
+            document.settings.getroot().xpath(UPDATE_FIELDS_XPATH, namespaces=NAMESPACES),
+            ["true"])

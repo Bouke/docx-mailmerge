@@ -92,46 +92,38 @@ class MergeField(object):
     """
     Base MergeField class
 
-    it contains the field name, and a method to return a list of elements (runs) given the data dictionary 
+    it contains the field name,
+    and a method to fill a list of elements (runs) given the data dictionary
+    That filled_elements list should be inserted in the document
     """
 
-    def __init__(self, parent, name="", key=None, instr=None, instr_tokens=None, nested=False, elements=None, ignore_elements=None):
+    def __init__(self, parent, name="", key=None, instr=None, instr_tokens=None, nested=False, all_elements=None, instr_elements=None, show_elements=None):
         """ Inits the MergeField class
         
         Args:
             parent: The parent element of the MergeField in the tree.
             idx: The idx of the MergeField in the parent.
-            name: The name of the field, if applicable"""
+            name: The name of the field, if applicable
+            all_elements: The list of all elements that need to be replaced in the parent
+            instr_elements: Elements that show the instructions of the field (used to construct the value)
+            show_elements: Elements that show the current value of the field
+        """
         self.parent = parent
         self.nested = nested
         self.key = key # the key of this MergeField to be able to identify it. It is used as the name in the replaced MergeField element
         # the list of elements to add when merging
-        self._elements_to_add = [] if elements is None else elements
-        # the list of elements to ignore when merging (after and including "separate" fldCharType)
-        self._elements_to_ignore = [] if ignore_elements is None else ignore_elements
+        self._all_elements = [] if all_elements is None else all_elements
+        self._instr_elements = [] if instr_elements is None else instr_elements
+        self._show_elements = [] if show_elements is None else show_elements
         self.instr = instr
         self.instr_tokens = instr_tokens
         self.filled_elements = []
         self.filled_value = None
         self.name = name
+        instr_tokens = [] if instr_tokens is None else instr_tokens
         if not name and instr_tokens[1:]:
             self.name = instr_tokens[1]
 
-        self._parse_instruction()
-
-    def _parse_instruction(self):
-        # # we keep only the first node, and will add the text to this node
-        self._elements_to_ignore.extend(self._elements_to_add[1:])
-        del self._elements_to_add[1:]
-        first_elem = self._elements_to_add[0]
-        if first_elem.tag == '{%(w)s}fldSimple' % NAMESPACES:
-            # workaround for simple fields
-            elem_to_add = first_elem.find('{%(w)s}r' % NAMESPACES)
-            if MAKE_TESTS_HAPPY:
-                elem_to_add.clear()
-            self.parent.replace(first_elem, elem_to_add)
-            self._elements_to_add[0] = elem_to_add
-    
     def _format(self, value):
         options = self.instr_tokens[2:]
         while options:
@@ -261,6 +253,7 @@ class MergeField(object):
         return value
 
     def fill_data(self, merge_data, row):
+        """ fills the filled_elements with all the elements containing the output text """
         self.filled_elements = []
         value = row.get(self.name, "UNKNOWN({})".format(self.instr))
         try:
@@ -279,7 +272,7 @@ class MergeField(object):
             else:
                 return
         
-        elem = deepcopy(self._elements_to_add[0])
+        elem = deepcopy(self._instr_elements[0])
         for child in elem.xpath('w:instrText', namespaces=NAMESPACES):
             elem.remove(child)
         for child in elem.xpath('w:t', namespaces=NAMESPACES):
@@ -311,13 +304,11 @@ class MergeField(object):
         
         """
         # Make sure ALL elements from the original tree are removed except for the first useful, that we will replace
-        for subelem in self._elements_to_ignore:
-            self.parent.remove(subelem)
-        for subelem in self._elements_to_add[1:]:
+        for subelem in self._all_elements[1:]:
             self.parent.remove(subelem)
 
         replacement_element = Element("MergeField", merge_key=self.key, name=self.name)
-        self.parent.replace(self._elements_to_add[0], replacement_element)
+        self.parent.replace(self._all_elements[0], replacement_element)
         return replacement_element
 
 class NextField(MergeField):
@@ -391,7 +382,10 @@ class MergeData(object):
             text
             for elem in elements
             for text in elem.xpath('w:instrText/text()', namespaces=NAMESPACES) + [
-                "{{{}}}".format(obj_name) if not recursive else self.get_field_obj(obj_name).instr for obj_name in elem.xpath('@merge_key')]
+                "{{{}}}".format(obj_name)
+                if not recursive else
+                self.get_field_obj(obj_name).instr
+                for obj_name in elem.xpath('@merge_key')]
         ])
 
     @classmethod
@@ -407,12 +401,12 @@ class MergeData(object):
         s = shlex.split(instr, posix=False)
         return s[0], s[1:]
 
-    def make_data_field(self, parent, key=None, nested=False, instr=None, elements=None, **kwargs):
+    def make_data_field(self, parent, key=None, nested=False, instr=None, all_elements=None, instr_elements=None, show_elements=None, **kwargs):
         """ MergeField factory method """
         if key is None:
             key = self._get_next_key()
 
-        instr = instr or self.get_instr_text(elements)
+        instr = instr or self.get_instr_text(instr_elements)
         field_type, rest = self._get_field_type(instr)
         field_class = self.FIELD_CLASSES.get(field_type)
         if field_class is None:
@@ -433,7 +427,9 @@ class MergeData(object):
             instr=instr,
             nested=nested,
             instr_tokens=tokens,
-            elements=elements,
+            all_elements=all_elements,
+            instr_elements=instr_elements,
+            show_elements=show_elements,
             **kwargs
         )
 
@@ -472,13 +468,14 @@ class MergeData(object):
             try:
                 filled_field = self.fill_field(field_element, row)
                 if filled_field:
+                    # assert len(filled_field.filled_elements) == 1
                     for text_element in reversed(filled_field.filled_elements):
                         field_element.addnext(text_element)
                     field_element.getparent().remove(field_element)
             except NextRecord:
                 field_element.getparent().remove(field_element)
                 row = self.next_row()
-    
+
     def replace_table_rows(self, body, anchor, rows):
         """ replace the rows of a table with the values from the rows list """
         table, idx, template = self.__find_row_anchor(body, anchor)
@@ -502,7 +499,7 @@ class MergeData(object):
                 if row.find('.//MergeField[@name="%s"]' % field) is not None:
                     return table, idx, row
         return None, None, None
-    
+
     def fill_field(self, field_element, row):
         """" fills the corresponding MergeField python object with data from row """
         if field_element.get('name') and (row is None or field_element.get('name') not in row):
@@ -517,6 +514,8 @@ class MergeDocument(object):
     """ prepare and merge one document 
     
         helper class to handle the actual merging of one document
+        with multiple rows of data
+        It is not compatible with Footer, Header, Footnotes, Endnotes XML documents.
         It prepares the body, sections, separators
     """
 
@@ -526,7 +525,7 @@ class MergeDocument(object):
         # self.sep_class = sep_class
         # if sep_class == 'section':
         #     self._set_section_type()
-        
+
         self._last_section = None # saving the last section to add it at the end
         self._body = None # the document body, where all the documents are appended
         self._body_copy = None # a deep copy of the original body without ending section
@@ -546,9 +545,9 @@ class MergeDocument(object):
             first_section = self.root.find("w:body/w:p/w:pPr/w:sectPr", namespaces=NAMESPACES)
             if first_section is None:
                 first_section = self.root.find("w:body/w:sectPr", namespaces=NAMESPACES)
-        
+
             type_element = first_section.find("w:type", namespaces=NAMESPACES)
-            
+
             if MAKE_TESTS_HAPPY:
                 if type_element is not None:
                     first_section.remove(type_element)
@@ -561,7 +560,7 @@ class MergeDocument(object):
 
         #FINDING LAST SECTION OF THE DOCUMENT
         self._last_section = self.root.find("w:body/w:sectPr", namespaces=NAMESPACES)
-    
+
         self._body = self._last_section.getparent()
         self._body.remove(self._last_section)
 
@@ -579,7 +578,7 @@ class MergeDocument(object):
             r = etree.SubElement(self._separator, '{%(w)s}r'  % NAMESPACES)
             nbreak = etree.SubElement(r, '{%(w)s}br' % NAMESPACES)
             nbreak.set('{%(w)s}type' % NAMESPACES, sep_type)
-    
+
     def prepare(self, merge_data, first=False):
         """ prepares the current body for the merge """
         assert self._current_body is None
@@ -593,7 +592,7 @@ class MergeDocument(object):
 
     def merge(self, merge_data, row, first=False):
         """ Merges one row into the current prepared body """
-        
+
         merge_data.replace(self._current_body, row)
 
     def _fix_id(self, merge_data, element, attr_gen):
@@ -640,9 +639,10 @@ class MailMerge(object):
 
     """
 
-    def __init__(self, file, remove_empty_tables=False, auto_update_fields_on_open="no"):
+    def __init__(self, file, remove_empty_tables=False, auto_update_fields_on_open="no", merge_params="all"):
         """ 
         auto_update_fields_on_open : no, auto, always - auto = only when needed
+        merge_params : all - merge all fields even if no data, some - only merge fields with data, none - only replace text inside fields but not the fields themselves
         """
         self.zip = ZipFile(file)
         self.parts = {} # part: ElementTree
@@ -651,6 +651,8 @@ class MailMerge(object):
         self.merge_data = MergeData(remove_empty_tables=remove_empty_tables)
         self.remove_empty_tables = remove_empty_tables
         self.auto_update_fields_on_open = auto_update_fields_on_open
+        self.merge_params = merge_params
+        self._has_unmerged_fields = True
 
         try:
             self.__fill_parts()
@@ -659,8 +661,6 @@ class MailMerge(object):
                 self.__fill_simple_fields(part)
                 self.__fill_complex_fields(part)
 
-            # Remove mail merge settings to avoid error messages when opening document in Winword
-            self.__fix_settings()
         except:
             self.zip.close()
             raise
@@ -679,11 +679,18 @@ class MailMerge(object):
                 zi, self.parts[zi] = self.__get_tree_of_file(file)
             elif type == CONTENT_TYPE_SETTINGS:
                 self._settings_info, self.settings = self.__get_tree_of_file(file)
-    
+
     def __fill_simple_fields(self, part):
         for fld_simple_elem in part.findall('.//{%(w)s}fldSimple' % NAMESPACES):
+            first_run_elem = fld_simple_elem.find('{%(w)s}r' % NAMESPACES)
+            if MAKE_TESTS_HAPPY:
+                first_run_elem.clear()
             merge_field_obj = self.merge_data.make_data_field(
-                fld_simple_elem.getparent(), instr=fld_simple_elem.get('{%(w)s}instr' % NAMESPACES), elements=[fld_simple_elem])
+                fld_simple_elem.getparent(),
+                instr=fld_simple_elem.get('{%(w)s}instr' % NAMESPACES),
+                all_elements=[fld_simple_elem],
+                instr_elements=[first_run_elem],
+                show_elements=[first_run_elem])
             if merge_field_obj:
                 merge_field_obj.insert_into_tree()
 
@@ -697,7 +704,7 @@ class MailMerge(object):
             if current_paragraph is None:
                 return None, None, None
             next_element = current_paragraph.find('w:r', namespaces=NAMESPACES)
-        
+
         # print(''.join(next_element.xpath('w:instrText/text()', namespaces=NAMESPACES)))
         field_char_subelem = next_element.find('w:fldChar', namespaces=NAMESPACES)
         if field_char_subelem is None:
@@ -710,9 +717,16 @@ class MailMerge(object):
         assert (elements_of_type_begin)
         current_element = elements_of_type_begin.pop(0)
         parent_element = current_element.getparent()
-        good_elements = []
-        ignore_elements = [current_element]
-        current_element_list = good_elements
+        all_elements = [] # we need all the elments in case of updates
+        instr_elements = [] # the instruction part, elements that define how to get the value
+        show_elements = [] # the elements showing the current value
+
+        current_element_list = instr_elements
+        all_elements.append(current_element)
+        
+        # good_elements = []
+        # ignore_elements = [current_element]
+        # current_element_list = good_elements
         field_char_type = None
 
         # print('>>>>>>>')
@@ -720,9 +734,9 @@ class MailMerge(object):
             # find next sibling
             next_element, field_char_subelem, field_char_type = \
                 self.__get_next_element(current_element)
+
             if next_element is None:
-                
-                instr_text = self.merge_data.get_instr_text(good_elements, recursive=True)
+                instr_text = self.merge_data.get_instr_text(instr_elements, recursive=True)
                 raise ValueError("begin without end near:" + instr_text)
 
             if field_char_type == 'begin':
@@ -734,24 +748,28 @@ class MailMerge(object):
                 # print("current list is ignore", current_element_list is ignore_elements)
                 # print("<<<<< #####", etree.tostring(next_element))
             elif field_char_type == 'separate':
-                current_element_list = ignore_elements
+                current_element_list = show_elements
             elif next_element.tag == 'MergeField':
                 # we have a nested simple Field - mark it as nested
                 self.merge_data.mark_field_as_nested(next_element.get('merge_key'))
 
-            current_element_list.append(next_element)
+            if field_char_type not in ['end', 'separate']:
+                current_element_list.append(next_element)
+            all_elements.append(next_element)
             current_element = next_element
-        
+
         # print('<<<<<<<', len(good_elements), len(ignore_elements))
         merge_obj = self.merge_data.make_data_field(
             parent_element,
             nested=nested,
-            elements=good_elements,
-            ignore_elements=ignore_elements)
+            all_elements=all_elements,
+            instr_elements=instr_elements,
+            show_elements=show_elements)
         return merge_obj, current_element
 
     def __fill_complex_fields(self, part):
         """ finds all begin fields and then builds the MergeField objects and inserts the replacement Elements in the tree """
+        # will find all "runs" containing an element of fldChar type=begin
         elements_of_type_begin = list(part.findall('.//{%(w)s}r/{%(w)s}fldChar[@{%(w)s}fldCharType="begin"]/..' % NAMESPACES))
         while elements_of_type_begin:
             merge_field_obj, _ = self._pull_next_merge_field(elements_of_type_begin)
@@ -763,10 +781,11 @@ class MailMerge(object):
 
         if self.settings:
             settings_root = self.settings.getroot()
-            mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
-            if mail_merge is not None:
-                settings_root.remove(mail_merge)
-            
+            if not self._has_unmerged_fields:
+                mail_merge = settings_root.find('{%(w)s}mailMerge' % NAMESPACES)
+                if mail_merge is not None:
+                    settings_root.remove(mail_merge)
+
             add_update_fields_setting = (
                 self.auto_update_fields_on_open == "auto" and self.merge_data.has_nested_fields
                 or self.auto_update_fields_on_open == "always"
@@ -783,11 +802,20 @@ class MailMerge(object):
         return zi, etree.parse(self.zip.open(zi))
 
     def write(self, file, empty_value=''):
-        if empty_value is not None:
+        if empty_value is not None and self.merge_params == 'all':
             self.merge(**{
                 field: empty_value
                 for field in self.get_merge_fields()
             })
+        # else:
+        #     self.merge(**{
+        #         field: empty_value
+        #         for field in self.get_merge_fields()
+        #     })
+        
+        self._has_unmerged_fields = bool(self.get_merge_fields())
+        # Remove mail merge settings to avoid error messages when opening document in Winword
+        self.__fix_settings()
 
         with ZipFile(file, 'w', ZIP_DEFLATED) as output:
             for zi in self.zip.filelist:
@@ -807,13 +835,15 @@ class MailMerge(object):
         fields = set()
         for part in parts:
             for mf in part.findall('.//MergeField'):
-                for name in self.merge_data.get_merge_fields(mf.attrib['merge_key']):
-                    fields.add(name)
+                fields.add(mf.attrib['name'])
+                # for name in self.merge_data.get_merge_fields(mf.attrib['merge_key']):
+                #     fields.add(name)
         return fields
 
     def merge_templates(self, replacements, separator):
-        """
-        Duplicate template. Creates a copy of the template, does a merge, and separates them by a new paragraph, a new break or a new section break.
+        """mailmerge one document with MULTIPLE data sets, and separate the output
+
+        is NOT compatible with header/footer/footnotes/endnotes
         separator must be :
         - page_break : Page Break. 
         - column_break : Column Break. ONLY HAVE EFFECT IF DOCUMENT HAVE COLUMNS
@@ -826,7 +856,9 @@ class MailMerge(object):
         """
         assert replacements, "empty data"
         #TYPE PARAM CONTROL AND SPLIT
-        
+
+        # Duplicate template. Creates a copy of the template, does a merge, and separates them by a new paragraph, a new break or a new section break.
+
         #GET ROOT - WORK WITH DOCUMENT
         for part in self.parts.values():
             root = part.getroot()
@@ -836,6 +868,8 @@ class MailMerge(object):
             if tag in ATTACHMENT_TAGS_WITH_NAMESPACE:
                 continue
 
+            # the mailmerge is done with the help of the MergeDocument class
+            # that handles the document duplication
             with MergeDocument(root, separator) as merge_doc:
                 row = self.merge_data.start_merge(replacements)
                 while row is not None:
@@ -853,14 +887,15 @@ class MailMerge(object):
          """
          warnings.warn("merge_pages has been deprecated in favour of merge_templates",
                       category=DeprecationWarning,
-                      stacklevel=2)         
+                      stacklevel=2)
          self.merge_templates(replacements, "page_break")
 
-    def merge(self, parts=None, **replacements):
-        if not parts:
-            parts = self.parts.values()
-
-        for part in parts:
+    def merge(self, **replacements):
+        """mailmerge one document with one set of values
+        
+        is compatible with header/footer/footnotes/endnotes
+        """
+        for part in self.parts.values():
             self.merge_data.replace(part, replacements)
 
     def merge_rows(self, anchor, rows):

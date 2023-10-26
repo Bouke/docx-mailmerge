@@ -28,7 +28,8 @@ Open the file.
     from mailmerge import MailMerge
     with MailMerge('input.docx',
             remove_empty_tables=False,
-            auto_update_fields_on_open="no") as document:
+            auto_update_fields_on_open="no",
+            merge_params="all") as document:
         ...
 
 
@@ -74,7 +75,7 @@ Starting in version 0.2.0 there's also the feature for template merging.
 This creates a copy of the template for each item in the list, does a merge,
 and separates them by page or section breaks (see function documentation).
 
-When using this feature, make sure you don't use comments, footnotes, 
+When using this feature, make sure you don't use header/footers, comments, footnotes, 
 bookmarks, etc. This is because these elements have an id attribute, which
 must be unique. This library does not handle this, resulting in invalid
 documents.
@@ -102,7 +103,8 @@ If locale support is needed, make sure to call the setlocale before merging
 The {NEXT} fields are supported (0.6.3).
 
 You can also use the merge fields inside other fields, for example to insert
-pictures in the docx {INCLUDEPICTURE} or for conditional texts {IF}
+pictures in the docx {INCLUDEPICTURE} or for conditional texts {IF}.
+Microsoft Word is needed to update the values of those fields.
 ::
 
     { INCLUDEPICTURE "{ MERGEFIELD path }/{ MERGEFIELD image }" }
