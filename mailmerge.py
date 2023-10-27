@@ -124,6 +124,10 @@ class MergeField(object):
         if not name and instr_tokens[1:]:
             self.name = instr_tokens[1]
 
+    def reset(self):
+        """ resets the value """
+        self.filled_elements = []
+
     def _format(self, value):
         options = self.instr_tokens[2:]
         while options:
@@ -271,7 +275,7 @@ class MergeField(object):
                 value = ""
             else:
                 return
-        
+
         elem = deepcopy(self._instr_elements[0])
         for child in elem.xpath('w:instrText', namespaces=NAMESPACES):
             elem.remove(child)
@@ -286,9 +290,35 @@ class MergeField(object):
 
         self.filled_elements.append(elem)
 
+    def get_elements_to_replace(self, keep_field=False):
+        """ returns the list of filled elements to put in the document
+
+        three possible outcomes:
+        - only the value (keep_field=False)
+        - the original field without updating the value(keep_field=True, no value filled in)
+        - the field with an updated value(keep_field=True, new value filled in)
+        """
+        if keep_field:
+            if not self.filled_elements: # we keep the original value
+                return self._all_elements
+            return self.get_field_with_filled_elements()
+        return self.filled_elements
+
+    def get_field_with_filled_elements(self):
+        # for complex fields
+        all_elements = self._all_elements[:] # copy of all elements
+        if not self._show_elements:
+            separate_element = deepcopy(self._all_elements[-1])
+            separate_element.find('w:fldChar', namespaces=NAMESPACES).set('{%(w)s}fldCharType' % NAMESPACES, "separate")
+            all_elements[-1:-1] = [separate_element] + self.filled_elements
+        else:
+            index = all_elements.index(self._show_elements[0])
+            all_elements[index:index+len(self._show_elements)] = self.filled_elements
+        return all_elements
+
     def _make_br(self):
         return Element('{%(w)s}br' % NAMESPACES)
-    
+
     def _make_text(self, text):
         if self.nested:
             text_node = Element('{%(w)s}instrText' % NAMESPACES)
@@ -311,6 +341,19 @@ class MergeField(object):
         self.parent.replace(self._all_elements[0], replacement_element)
         return replacement_element
 
+class SimpleMergeField(MergeField):
+    """ differences for simple fields """
+
+    def get_field_with_filled_elements(self):
+        # for simple fields
+        field_element = deepcopy(self._all_elements[0])
+        # remove all child elements
+        for child in list(field_element):
+            field_element.remove(child)
+        for child in self.filled_elements:
+            field_element.append(child)
+        return [field_element]
+
 class NextField(MergeField):
 
     def fill_data(self, merge_data, row):
@@ -320,17 +363,19 @@ class MergeData(object):
 
     """ prepare the MergeField objects and the data """
 
+    SUPPORTED_FIELDS = {"MERGEFIELD", "NEXT"}
     FIELD_CLASSES = {
-        "MERGEFIELD": MergeField,
-        "NEXT": NextField,
+        "NEXT": NextField
     }
 
-    def __init__(self, remove_empty_tables=False):
+    def __init__(self, remove_empty_tables=False, keep_fields="none"):
         self._merge_field_map = {} # merge_field.key: MergeField()
         self._merge_field_next_id = 0
         self.duplicate_id_map = {} # tag: {'max': max_id, 'ids': set(existing_ids)}
         self.has_nested_fields = False
         self.remove_empty_tables = remove_empty_tables
+        self.keep_fields = keep_fields
+        self.replace_fields_with_missing_data = False
         self._rows = None
         self._current_index = None
 
@@ -401,18 +446,18 @@ class MergeData(object):
         s = shlex.split(instr, posix=False)
         return s[0], s[1:]
 
-    def make_data_field(self, parent, key=None, nested=False, instr=None, all_elements=None, instr_elements=None, show_elements=None, **kwargs):
+    def make_data_field(self, parent, field_class=MergeField, key=None, nested=False, instr=None, all_elements=None, instr_elements=None, show_elements=None, **kwargs):
         """ MergeField factory method """
         if key is None:
             key = self._get_next_key()
 
         instr = instr or self.get_instr_text(instr_elements)
         field_type, rest = self._get_field_type(instr)
-        field_class = self.FIELD_CLASSES.get(field_type)
-        if field_class is None:
+        if field_type not in self.SUPPORTED_FIELDS:
             # ignore the field
             # print("ignore field", instr)
             return None
+        field_class = self.FIELD_CLASSES.get(field_type, field_class)
 
         try:
             tokens = list(self._get_instr_tokens(instr))
@@ -465,16 +510,34 @@ class MergeData(object):
 
         merge_fields = body.findall('.//MergeField')
         for field_element in merge_fields:
+            field_obj = None
             try:
-                filled_field = self.fill_field(field_element, row)
-                if filled_field:
-                    # assert len(filled_field.filled_elements) == 1
-                    for text_element in reversed(filled_field.filled_elements):
-                        field_element.addnext(text_element)
-                    field_element.getparent().remove(field_element)
+                field_obj = self.get_field_object(field_element, row)
+                field_obj.reset()
+                if self._has_value_in_row(field_element, row):
+                    field_obj.fill_data(self, row) # can throw NextRecord
+                    self.replace_field(field_element, field_obj)
+                elif self.replace_fields_with_missing_data:
+                    self.replace_field(field_element, field_obj, force_keep_field=True)
             except NextRecord:
-                field_element.getparent().remove(field_element)
+                self.replace_field(field_element, field_obj)
                 row = self.next_row()
+
+    def _has_value_in_row(self, field_element, row):
+        return not (
+            field_element.get('name') and
+            (row is None or field_element.get('name') not in row))
+
+    def replace_field(self, field_element, field_obj=None, force_keep_field=False):
+        """ replaces a field element MergeField in the body with the filled_elements"""
+        # assert len(filled_field.filled_elements) == 1
+        if field_obj:
+            keep_field=force_keep_field or self.keep_fields == "all"
+            elements_to_replace = field_obj.get_elements_to_replace(keep_field=keep_field)
+            for text_element in reversed(elements_to_replace):
+                field_element.addnext(text_element)
+        field_element.getparent().remove(field_element)
+
 
     def replace_table_rows(self, body, anchor, rows):
         """ replace the rows of a table with the values from the rows list """
@@ -500,13 +563,12 @@ class MergeData(object):
                     return table, idx, row
         return None, None, None
 
-    def fill_field(self, field_element, row):
+    def get_field_object(self, field_element, row):
         """" fills the corresponding MergeField python object with data from row """
-        if field_element.get('name') and (row is None or field_element.get('name') not in row):
-            return None
+        # if field_element.get('name') and (row is None or field_element.get('name') not in row):
+        #     return None
         field_key = field_element.get('merge_key')
         field_obj = self._merge_field_map[field_key]
-        field_obj.fill_data(self, row)
         return field_obj
 
 class MergeDocument(object):
@@ -639,20 +701,20 @@ class MailMerge(object):
 
     """
 
-    def __init__(self, file, remove_empty_tables=False, auto_update_fields_on_open="no", merge_params="all"):
+    def __init__(self, file, remove_empty_tables=False, auto_update_fields_on_open="no", keep_fields="none"):
         """ 
         auto_update_fields_on_open : no, auto, always - auto = only when needed
-        merge_params : all - merge all fields even if no data, some - only merge fields with data, none - only replace text inside fields but not the fields themselves
+        keep_fields : none - merge all fields even if no data, some - keep fields with no data, all - keep all fields
         """
         self.zip = ZipFile(file)
         self.parts = {} # part: ElementTree
         self.settings = None
         self._settings_info = None
-        self.merge_data = MergeData(remove_empty_tables=remove_empty_tables)
+        self.merge_data = MergeData(remove_empty_tables=remove_empty_tables, keep_fields=keep_fields)
         self.remove_empty_tables = remove_empty_tables
         self.auto_update_fields_on_open = auto_update_fields_on_open
-        self.merge_params = merge_params
-        self._has_unmerged_fields = True
+        self.keep_fields = keep_fields
+        self._has_unmerged_fields = False
 
         try:
             self.__fill_parts()
@@ -682,12 +744,13 @@ class MailMerge(object):
 
     def __fill_simple_fields(self, part):
         for fld_simple_elem in part.findall('.//{%(w)s}fldSimple' % NAMESPACES):
-            first_run_elem = fld_simple_elem.find('{%(w)s}r' % NAMESPACES)
+            first_run_elem = deepcopy(fld_simple_elem.find('{%(w)s}r' % NAMESPACES))
             if MAKE_TESTS_HAPPY:
                 first_run_elem.clear()
             merge_field_obj = self.merge_data.make_data_field(
                 fld_simple_elem.getparent(),
                 instr=fld_simple_elem.get('{%(w)s}instr' % NAMESPACES),
+                field_class=SimpleMergeField,
                 all_elements=[fld_simple_elem],
                 instr_elements=[first_run_elem],
                 show_elements=[first_run_elem])
@@ -802,18 +865,21 @@ class MailMerge(object):
         return zi, etree.parse(self.zip.open(zi))
 
     def write(self, file, empty_value=''):
-        if empty_value is not None and self.merge_params == 'all':
-            self.merge(**{
-                field: empty_value
-                for field in self.get_merge_fields()
-            })
-        # else:
-        #     self.merge(**{
-        #         field: empty_value
-        #         for field in self.get_merge_fields()
-        #     })
-        
         self._has_unmerged_fields = bool(self.get_merge_fields())
+
+        if empty_value is not None:
+            if self.keep_fields == 'none':
+                # we use empty values to replace all fields having no data
+                self.merge(**{
+                    field: empty_value
+                    for field in self.get_merge_fields()
+                })
+            else:
+                # we keep the fields having no data with the original value
+                self.merge_data.replace_fields_with_missing_data = True
+                self.merge()
+                self.merge_data.replace_fields_with_missing_data = False
+
         # Remove mail merge settings to avoid error messages when opening document in Winword
         self.__fix_settings()
 
@@ -895,6 +961,9 @@ class MailMerge(object):
         
         is compatible with header/footer/footnotes/endnotes
         """
+        self._merge(replacements)
+
+    def _merge(self, replacements):
         for part in self.parts.values():
             self.merge_data.replace(part, replacements)
 

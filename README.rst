@@ -29,7 +29,7 @@ Open the file.
     with MailMerge('input.docx',
             remove_empty_tables=False,
             auto_update_fields_on_open="no",
-            merge_params="all") as document:
+            keep_fields="none") as document:
         ...
 
 
@@ -130,13 +130,35 @@ existing zip files.
 
     document.write('output.docx')
 
+By default, all MERGEFIELD fields are replaced with their value. If a value is 
+not given, it is replaced with an empty string.
+If you want to keep the existing MERGEFIELD fields (with their current value)
+you can specify the keep_fields="some" parameter in the constructor.
+::
+
+    from mailmerge import MailMerge
+    with MailMerge('keep_unchanged_fields.docx',
+            keep_fields="some") as document:
+        ...
+
+If you want to only update the value of the MERGEFIELD fields but keep the 
+fields themselves, you can specify the keep_fields="all" parameter in the 
+constructor. This way, you can change the document and update the fields again
+later.
+::
+
+    from mailmerge import MailMerge
+    with MailMerge('keep_all_fields.docx',
+            keep_fields="all") as document:
+        ...
+
+
 See also the unit tests and this nice write-up `Populating MS Word Templates
 with Python`_ on Practical Business Python for more information and examples.
 
 Todo / Wish List
 ================
 
-* Update fields instead of replacing them, so future merges will also work as an "update"
 * Create single word documents for each row of data
 * Implement SKIPIF and NEXTIF fields
 

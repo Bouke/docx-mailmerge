@@ -8,6 +8,7 @@ from lxml import etree
 from mailmerge import MailMerge, NAMESPACES, CONTENT_TYPES_PARTS
 
 CONTENT_TYPE_DOCUMENT = CONTENT_TYPES_PARTS[0]
+TEXTS_XPATH = "//w:t/text()"
 
 class EtreeMixin(object):
 
