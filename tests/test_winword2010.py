@@ -179,4 +179,4 @@ class Windword2010Test(EtreeMixin, unittest.TestCase):
         )
 
         self.assert_equal_tree(expected_tree, list(document.parts.values())[0].getroot())
-        self.assertIsNone(document.settings.getroot().find('{%(w)s}mailMerge' % NAMESPACES))
+        self.assertIsNone(document.get_settings().getroot().find('{%(w)s}mailMerge' % NAMESPACES))

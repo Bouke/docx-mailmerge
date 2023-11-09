@@ -31,7 +31,7 @@ class MergeParamsTest(EtreeMixin, unittest.TestCase):
             )
 
         self.assertListEqual(
-            document.settings.getroot().xpath(MERGE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(MERGE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
             [])
         self.assertListEqual(
             root_elem.xpath(TEXTS_XPATH, namespaces=NAMESPACES),
@@ -54,7 +54,7 @@ class MergeParamsTest(EtreeMixin, unittest.TestCase):
             )
 
         self.assertListEqual(
-            document.settings.getroot().xpath(MERGE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(MERGE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
             [])
         self.assertListEqual(
             root_elem.xpath(TEXTS_XPATH, namespaces=NAMESPACES),
@@ -77,7 +77,7 @@ class MergeParamsTest(EtreeMixin, unittest.TestCase):
             )
 
         self.assertListEqual(
-            document.settings.getroot().xpath(MERGE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(MERGE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
             [])
         self.assertListEqual(
             root_elem.xpath(TEXTS_XPATH, namespaces=NAMESPACES),

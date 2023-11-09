@@ -45,7 +45,7 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
             # output="tests/output/test_output_nested_if_outside.docx"
             )
         self.assertListEqual(
-            document.settings.getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
             [])
 
         document, root_elem = self.merge(
@@ -55,7 +55,7 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
             # output="tests/output/test_output_nested_if_outside.docx"
             )
         self.assertListEqual(
-            document.settings.getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
             [])
 
         document, root_elem = self.merge(
@@ -65,7 +65,7 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
             # output="tests/output/test_output_nested_if_outside.docx"
             )
         self.assertListEqual(
-            document.settings.getroot().xpath(UPDATE_FIELDS_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(UPDATE_FIELDS_XPATH, namespaces=NAMESPACES),
             ["true"])
 
     def test_field_inside(self):
@@ -123,7 +123,7 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
             # output="tests/output/test_output_nested_if_inside.docx"
             )
         self.assertListEqual(
-            document.settings.getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(UPDATE_FIELDS_TRUE_XPATH, namespaces=NAMESPACES),
             [])
 
         document, root_elem = self.merge(
@@ -133,5 +133,5 @@ class NestedFieldsTest(EtreeMixin, unittest.TestCase):
             # output="tests/output/test_output_nested_if_inside.docx"
             )
         self.assertListEqual(
-            document.settings.getroot().xpath(UPDATE_FIELDS_XPATH, namespaces=NAMESPACES),
+            document.get_settings().getroot().xpath(UPDATE_FIELDS_XPATH, namespaces=NAMESPACES),
             ["true"])
