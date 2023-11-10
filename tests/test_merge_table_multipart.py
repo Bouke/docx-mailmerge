@@ -4,7 +4,7 @@ from os import path
 from lxml import etree
 
 from mailmerge import MailMerge
-from tests.utils import EtreeMixin
+from tests.utils import EtreeMixin, get_document_body_part
 
 
 class MergeTableRowsMultipartTest(EtreeMixin, unittest.TestCase):
@@ -32,10 +32,7 @@ class MergeTableRowsMultipartTest(EtreeMixin, unittest.TestCase):
         with tempfile.TemporaryFile() as outfile:
             self.document.write(outfile)
 
-        for part in self.document.parts.values():
-            # only check the document part 
-            if (part.getroot().tag == '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document'):
-                self.assert_equal_tree(self.expected_tree, part.getroot())
+        self.assert_equal_tree(self.expected_tree, get_document_body_part(self.document).getroot())
 
     def test_merge_unified_on_multipart_file(self):
         self.document.merge(
@@ -52,10 +49,7 @@ class MergeTableRowsMultipartTest(EtreeMixin, unittest.TestCase):
         with tempfile.TemporaryFile() as outfile:
             self.document.write(outfile)
 
-        for part in self.document.parts.values():
-            # only check the document part 
-            if (part.getroot().tag == '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}document'):
-                self.assert_equal_tree(self.expected_tree, part.getroot())
+        self.assert_equal_tree(self.expected_tree, get_document_body_part(self.document).getroot())
 
     def tearDown(self):
         self.document.close()

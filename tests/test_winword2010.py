@@ -4,7 +4,7 @@ from os import path
 from lxml import etree
 
 from mailmerge import MailMerge, NAMESPACES
-from tests.utils import EtreeMixin
+from tests.utils import EtreeMixin, get_document_body_part
 
 
 class Windword2010Test(EtreeMixin, unittest.TestCase):
@@ -178,5 +178,5 @@ class Windword2010Test(EtreeMixin, unittest.TestCase):
             '</w:document>'  # noqa
         )
 
-        self.assert_equal_tree(expected_tree, list(document.parts.values())[0].getroot())
+        self.assert_equal_tree(expected_tree, get_document_body_part(document).getroot())
         self.assertIsNone(document.get_settings().getroot().find('{%(w)s}mailMerge' % NAMESPACES))

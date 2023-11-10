@@ -4,7 +4,7 @@ from os import path
 from lxml import etree
 
 from mailmerge import MailMerge
-from tests.utils import EtreeMixin
+from tests.utils import EtreeMixin, get_document_body_part
 
 
 class MultipleElementsTest(EtreeMixin, unittest.TestCase):
@@ -49,4 +49,4 @@ class MultipleElementsTest(EtreeMixin, unittest.TestCase):
                 'w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/><w:cols '
                 'w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr></w:body></w:document>')
 
-            self.assert_equal_tree(expected_tree, list(document.parts.values())[0].getroot())
+            self.assert_equal_tree(expected_tree, get_document_body_part(document).getroot())

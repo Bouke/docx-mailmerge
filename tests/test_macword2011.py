@@ -4,7 +4,7 @@ from os import path
 from lxml import etree
 
 from mailmerge import MailMerge
-from tests.utils import EtreeMixin
+from tests.utils import EtreeMixin, get_document_body_part
 
 
 class MacWord2011Test(EtreeMixin, unittest.TestCase):
@@ -57,4 +57,4 @@ class MacWord2011Test(EtreeMixin, unittest.TestCase):
             '/><w:pgMar w:bottom="1417" w:footer="708" w:gutter="0" w:header="708" w:left="1417" w:right="1417" '
             'w:top="1417" /><w:cols w:space="708" /><w:docGrid w:linePitch="360" /></w:sectPr></w:body></w:document>')
 
-        self.assert_equal_tree(expected_tree, list(document.parts.values())[0].getroot())
+        self.assert_equal_tree(expected_tree, get_document_body_part(document).getroot())

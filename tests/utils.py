@@ -100,7 +100,18 @@ class EtreeMixin(object):
 
 def get_document_body_part(document, endswith="document"):
     for part in document.parts.values():
-        if part.getroot().tag.endswith('}%s' % endswith):
-            return part
+        if part['part'].getroot().tag.endswith('}%s' % endswith):
+            return part['part']
 
     raise AssertionError("main document body not found in document.parts")
+
+def get_document_body_parts(document, endswith="document"):
+    parts = []
+    for part in document.parts.values():
+        if part['part'].getroot().tag.endswith('}%s' % endswith):
+            parts.append(part['part'])
+    for _, _, part in document.new_parts:
+        if part.getroot().tag.endswith('}%s' % endswith):
+            parts.append(part)
+
+    return parts
