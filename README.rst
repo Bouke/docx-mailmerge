@@ -74,11 +74,8 @@ single call to `merge`.
 Starting in version 0.2.0 there's also the feature for template merging.
 This creates a copy of the template for each item in the list, does a merge,
 and separates them by page or section breaks (see function documentation).
-
-When using this feature, make sure you don't use header/footers, comments, footnotes, 
-bookmarks, etc. This is because these elements have an id attribute, which
-must be unique. This library does not handle this, resulting in invalid
-documents.
+Starting in version 0.8.0 you can also use fields in the headers/footers/footnotes
+with the merge_templates method.
 ::
 
     document.merge_templates([
