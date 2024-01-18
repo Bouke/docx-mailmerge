@@ -153,6 +153,25 @@ later.
 See also the unit tests and this nice write-up `Populating MS Word Templates
 with Python`_ on Practical Business Python for more information and examples.
 
+Inserting Dynamic Images
+========================
+
+To include dynamic images in a docx template document you can use the 
+{ INCLUDEPICTURE "...." } field. For the path you can use MERGEFIELD dynamic 
+fields. See example above.
+
+The problem is to actually include the images in the word document after the 
+mailmerge. This can be done by opening the merged docx in Microsoft Word, 
+selecting all the text and pressing the F9 to update all fields. Unfortunately
+this method needs Microsoft Word installed and it is known to cause a lot of 
+problems.
+
+Another solution would be to use the `docx-mergefields`_ package to replace the
+INCLUDEPICTURE fields with the actual image. This method also works with images
+loaded from a database in base64 data-uri format, as well as URLs and local images.
+
+See the documentation of `docx-mergefields`_ for examples.
+
 Todo / Wish List
 ================
 
@@ -185,3 +204,4 @@ Credits
 .. _Populating MS Word Templates with Python: http://pbpython.com/python-word-template.html
 .. _originally: https://github.com/Bouke/docx-mailmerge
 .. _Iulian Ciorăscu: https://github.com/iulica/
+.. _docx-mergefields: https://github.com/iulica/docx-mergefields
