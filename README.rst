@@ -175,7 +175,6 @@ See the documentation of `docx-mergefields`_ for examples.
 Todo / Wish List
 ================
 
-* Create single word documents for each row of data
 * Implement SKIPIF and NEXTIF fields
 
 Contributing
