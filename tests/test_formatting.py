@@ -57,7 +57,7 @@ class FormattingTest(EtreeMixin, unittest.TestCase):
         )
 
     def test_date(self):
-        datetime_value = datetime.datetime(2022, 3, 9, 17, 7, 8)  # noqa: DTZ001
+        datetime_value = datetime.datetime(2022, 3, 9, 17, 7, 8)
         date_value = datetime_value.date()
         time_value = datetime_value.time()
         # time12_value = datetime_value - datetime.timedelta(hours=12)

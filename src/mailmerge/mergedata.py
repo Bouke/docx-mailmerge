@@ -94,12 +94,14 @@ class MergeData:
         return s
 
     @classmethod
-    def _get_field_type(cls, instr):
-        s = shlex.split(instr, posix=False)
+    def _get_field_tokens(cls, instr):
+        try:
+            parts = list(cls._get_instr_tokens(instr))
+        except ValueError as e:
+            parts = [part.replace('"', "") for part in shlex.split(instr, posix=False)]
+            warnings.warn(f"Invalid field description <{e!s}> near: <{instr}>")
         # For elements with no instr, otherwise this will throw an exception
-        if len(s) > 0:
-            return s[0], s[1:]
-        return "", []
+        return parts
 
     def make_data_field(
         self,
@@ -118,18 +120,13 @@ class MergeData:
             key = self._get_next_key()
 
         instr = instr or self.get_instr_text(instr_elements)
-        field_type, rest = self._get_field_type(instr)
+        tokens = self._get_field_tokens(instr)
+        field_type = tokens[0] if tokens else ""
         if field_type not in self.supported_fields:
             # ignore the field
             # print("ignore field", instr)
             return None
         field_class = self.FIELD_CLASSES.get(field_type, field_class)
-
-        try:
-            tokens = list(self._get_instr_tokens(instr))
-        except ValueError as e:
-            tokens = [field_type] + [part.replace('"', "") for part in rest]
-            warnings.warn(f"Invalid field description <{e!s}> near: <{instr}>")
 
         # print("make data object", field_class, instr, len(elements), len(kwargs.get('ignore_elements', [])))
         field_obj = field_class(
