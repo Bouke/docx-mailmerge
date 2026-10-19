@@ -3,7 +3,7 @@ Performs a Mail Merge on Office Open XML (docx) files. Can be used on any
 system without having to install Microsoft Office Word. Supports Python 3.7 and up.
 """
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 __author__ = "Iulian Ciorăscu"
 __credits__ = ["Iulian Ciorăscu", "Bouke Haarsma"]
 __license__ = "MIT"
